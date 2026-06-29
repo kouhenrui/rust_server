@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+// Thumbor image-processing API.
+//
+// Success: `{ code: 0, message, data }`
+// Error:   `{ code: <http status>, message, err }`
+
+package thumbor.v1;
+
+message ImageRequest {
+  string src = 1;
+  optional uint32 w = 2;
+  optional uint32 h = 3;
+
+  enum FitMode {
+    FIT_MODE_UNSPECIFIED = 0;
+    COVER = 1;
+    CONTAIN = 2;
+    STRETCH = 3;
+  }
+  FitMode fit = 4;
+
+  message CropRect {
+    uint32 x = 1;
+    uint32 y = 2;
+    uint32 w = 3;
+    uint32 h = 4;
+  }
+  CropRect crop = 5;
+  string filters = 6;
+
+  message WatermarkText {
+    string text = 1;
+    int32 x = 2;
+    int32 y = 3;
+  }
+  message WatermarkImage {
+    string path = 1;
+    int32 x = 2;
+    int32 y = 3;
+  }
+  message Watermark {
+    oneof kind {
+      WatermarkText text = 1;
+      WatermarkImage image = 2;
+    }
+  }
+  Watermark watermark = 7;
+
+  enum OutputFormat {
+    OUTPUT_FORMAT_UNSPECIFIED = 0;
+    PNG = 1;
+    JPEG = 2;
+    WEBP = 3;
+  }
+  OutputFormat format = 8;
+}
+
+message ImageData {
+  bytes image = 1;
+  string content_type = 2;
+}
+
+message ErrInfo {
+  // Stable string identifier from `AppError::code()`, e.g. `bad_request`.
+  string kind = 1;
+}
+
+message ApiResponse {
+  int32 code = 1;
+  string message = 2;
+  optional ImageData data = 3;
+  optional ErrInfo err = 4;
+  string trace_id = 5;
+}

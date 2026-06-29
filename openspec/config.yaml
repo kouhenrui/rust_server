@@ -1,0 +1,20 @@
+schema: spec-driven
+
+# Project context — shown to AI when authoring artifacts.
+context: |
+  Tech stack: Rust 2021 edition, axum 0.7, tokio, image 0.25, imageproc 0.25,
+  tracing-subscriber, reqwest (rustls-tls only).
+  Domain: HTTP image processing server — single endpoint `/img` that takes a
+  source image and returns a transformed copy (crop, resize, filters, watermark,
+  output-format encoding).
+  API style: query-string driven, no path-versioning, JSON error envelope.
+  Non-goals: image storage, signed URLs, multi-tenant auth, in-memory caching,
+  image format conversions beyond PNG/JPEG/WebP.
+
+rules:
+  proposal:
+    - Keep proposals under 400 words
+    - Always include "Non-goals" and "Affected domains" sections
+  tasks:
+    - Break tasks so each is doable in a single focused edit
+    - Reference files by relative path under `src/`
