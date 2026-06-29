@@ -27,7 +27,7 @@
 
 ## 3. Wire it into the handler
 
-- [x] 3.1 `/img` handler calls `params.filters.clone().apply(&mut img)`
+- [x] 3.1 `controller/img.rs` calls `params.filters.clone().apply(&mut img)`
   after `transform::apply` and before `watermark::apply`.
 
 ## 4. Tests

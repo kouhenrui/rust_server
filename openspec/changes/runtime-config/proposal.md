@@ -24,7 +24,7 @@ of them without rebuilds.
   (default `true`).
 - Allow a local-source root to be set by
   `THUMBOR_LOCAL_SOURCE_ROOT` (default unset).
-- When a `THUMBOR_*` value is unparseable, log a `tracing::warn!`
+- When a `THUMBOR_*` value is unparseable, log a `crate::warn!`
   and fall back to the documented default. The service MUST NOT
   refuse to start because of a malformed configuration value.
 

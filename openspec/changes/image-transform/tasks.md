@@ -15,7 +15,7 @@
 
 ## 2. Wire it into the handler
 
-- [x] 2.1 `/img` handler calls `transform::apply` after
+- [x] 2.1 `controller/img.rs` calls `transform::apply` after
   `source::decode` and before the filter chain.
 
 ## 3. Verification

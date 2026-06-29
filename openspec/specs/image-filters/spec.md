@@ -39,19 +39,19 @@ The service MUST support at least these filters: `grayscale`, `brightness(N)`,
 
 ### Requirement: Argument validation
 The service MUST validate each filter's argument count and parseability, and
-reject the request with status 400 and error code `invalid_filter` on failure.
+reject the request with status 400 and `err.kind` of `invalid_filter` on failure.
 
 #### Scenario: unknown filter
 - GIVEN `filters=sepia`
 - WHEN the handler parses it
-- THEN the response status is 400 and the error code is `invalid_filter`
+- THEN the response status is 400 and `err.kind` is `invalid_filter`
 
 #### Scenario: bad arg count
 - GIVEN `filters=brightness(1,2)`
 - WHEN the handler parses it
-- THEN the response status is 400 and the error code is `invalid_filter`
+- THEN the response status is 400 and `err.kind` is `invalid_filter`
 
 #### Scenario: out of range blur
 - GIVEN `filters=blur(500)` (above the allowed ceiling)
 - WHEN the handler parses it
-- THEN the response status is 400 and the error code is `invalid_filter`
+- THEN the response status is 400 and `err.kind` is `invalid_filter`

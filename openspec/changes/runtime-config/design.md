@@ -50,7 +50,7 @@ overlay". Adding a new variable is two places: a `pub` field on
 ### Invalid values log a warning, do not error
 
 A `THUMBOR_BIND=not-an-addr` does not crash the service. It
-produces a `tracing::warn!` and the field stays at the default.
+produces a `crate::warn!` and the field stays at the default.
 The trade-off is explicit: we have decided that a misconfigured
 deployment is a recoverable problem, not a fatal one.
 

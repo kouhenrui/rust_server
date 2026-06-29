@@ -31,7 +31,7 @@ with its top-left at pixel `(10, 10)`.
 #### Scenario: missing overlay file
 - GIVEN `watermark=image:missing.png@0,0`
 - WHEN the handler loads the overlay
-- THEN the response status is 404 and the error code is `source_not_found`
+- THEN the response status is 404 and `err.kind` is `source_not_found`
 
 ### Requirement: Font is required for text watermarks
 The service MUST reject a text watermark with status 502 and error code
@@ -41,7 +41,7 @@ The service MUST reject a text watermark with status 502 and error code
 - GIVEN `THUMBOR_WATERMARK_FONT` is unset
 - AND a request with `watermark=Hello@0,0`
 - WHEN the handler applies the watermark
-- THEN the response status is 502 and the error code is `watermark_font_missing`
+- THEN the response status is 502 and `err.kind` is `watermark_font_missing`
 
 ### Requirement: Font is loaded lazily
 The service MUST NOT require the configured font file to exist at startup; it

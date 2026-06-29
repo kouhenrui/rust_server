@@ -27,7 +27,7 @@
 
 ## 3. Wire it into the handler
 
-- [x] 3.1 `/img` handler calls `watermark::apply` after
+- [x] 3.1 `controller/img.rs` calls `watermark::apply` after
   `params.filters.clone().apply(...)` and before the encoder.
   Both `img_get` and `img_post` go through `process_image`, which
   contains this ordering.

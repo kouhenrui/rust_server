@@ -21,7 +21,7 @@ pixel coordinates and crop the source to that rectangle.
 #### Scenario: crop out of bounds
 - GIVEN a crop origin that lies outside the source image
 - WHEN the handler applies the crop
-- THEN the response status is 400 and the error code is `bad_request`
+- THEN the response status is 400 and `err.kind` is `bad_request`
 
 #### Scenario: valid crop
 - GIVEN a `crop` rectangle that lies within the source image

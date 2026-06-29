@@ -3,13 +3,17 @@ schema: spec-driven
 # Project context — shown to AI when authoring artifacts.
 context: |
   Tech stack: Rust 2021 edition, axum 0.7, tokio, image 0.25, imageproc 0.25,
-  tracing-subscriber, reqwest (rustls-tls only).
-  Domain: HTTP image processing server — single endpoint `/img` that takes a
-  source image and returns a transformed copy (crop, resize, filters, watermark,
-  output-format encoding).
-  API style: query-string driven, no path-versioning, JSON error envelope.
-  Non-goals: image storage, signed URLs, multi-tenant auth, in-memory caching,
-  image format conversions beyond PNG/JPEG/WebP.
+  tracing-subscriber, reqwest (rustls-tls only), prost 0.13, redis 0.32, sqlx 0.8,
+  mongodb 3.2, nanoid.
+  Domain: HTTP image processing server — `/img` transforms a source image
+  (crop, resize, filters, watermark, output-format encoding).
+  API style: unified `ApiResponse` envelope for JSON and Protobuf; GET uses
+  query parameters, POST uses `application/x-protobuf`.
+  Architecture: `router.rs` + `controller/`, `response.rs` envelopes,
+  `middleware/` for trace_id and access logs, `logger/` for tracing init/macros,
+  pluggable `cache/` (disabled | memory | redis) and `db/` (postgres | mysql |
+  sqlite | mongodb).
+  Non-goals: image storage as a product feature, signed URLs, multi-tenant auth.
 
 rules:
   proposal:

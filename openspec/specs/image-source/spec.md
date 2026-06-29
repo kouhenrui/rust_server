@@ -40,7 +40,7 @@ The service MUST reject `http(s)://` sources when remote loading is disabled.
 #### Scenario: rejection
 - GIVEN `THUMBOR_ALLOW_REMOTE=false` and `src=https://...`
 - WHEN the handler loads the source
-- THEN the response status is 502 and the error code is `remote_disabled`
+- THEN the response status is 502 and `err.kind` is `remote_disabled`
 
 ### Requirement: Source size cap
 The service MUST reject any source whose body exceeds the configured maximum
@@ -49,7 +49,7 @@ The service MUST reject any source whose body exceeds the configured maximum
 #### Scenario: oversized source
 - GIVEN a source larger than the configured cap
 - WHEN the handler loads the source
-- THEN the response status is 413 and the error code is `source_too_large`
+- THEN the response status is 413 and `err.kind` is `source_too_large`
 
 ### Requirement: Fetch timeout
 Remote fetches MUST be bounded by `THUMBOR_FETCH_TIMEOUT_MS`. Timeouts surface
@@ -58,4 +58,4 @@ as a 502 with error code `upstream_failed`.
 #### Scenario: timeout
 - GIVEN a remote server that does not respond within the timeout
 - WHEN the handler loads the source
-- THEN the request fails with status 502 and error code `upstream_failed`
+- THEN the request fails with status 502 and `err.kind` is `upstream_failed`
