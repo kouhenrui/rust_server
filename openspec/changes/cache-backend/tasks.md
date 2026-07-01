@@ -25,3 +25,10 @@
 ## 5. Verification
 
 - [x] 5.1 `cargo test --lib` passes.
+
+## 6. Image pipeline integration
+
+- [x] 6.1 Cache key from `ImgParams::cache_key()`.
+- [x] 6.2 On `/img` success: `cache.set(key, packed_bytes, ttl)`.
+- [x] 6.3 On `/img` request: `cache.get` before pipeline when enabled.
+- [x] 6.4 Integration test with `THUMBOR_CACHE_BACKEND=memory`.

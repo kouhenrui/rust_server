@@ -1,6 +1,7 @@
 //! 数据库模块配置。
 
 use crate::error::AppError;
+use crate::util::parse_or_warn;
 
 /// 数据库连接参数：完整 URL 或 host / port / database + 账号密码。
 #[derive(Debug, Clone, Default)]
@@ -33,9 +34,8 @@ impl DbAuth {
         };
 
         if let Ok(v) = std::env::var("THUMBOR_DB_PORT") {
-            match v.parse() {
-                Ok(p) => auth.port = p,
-                Err(e) => crate::warn!(error = %e, "invalid THUMBOR_DB_PORT"),
+            if let Some(p) = parse_or_warn(&v, "invalid THUMBOR_DB_PORT") {
+                auth.port = p;
             }
         }
 

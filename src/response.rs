@@ -62,6 +62,15 @@ pub struct ImageData {
 #[derive(Debug, Clone, Serialize)]
 pub struct HealthData {
     pub status: &'static str,
+    pub cache: ComponentHealth,
+    pub database: ComponentHealth,
+}
+
+/// Per-dependency health in `/health` responses.
+#[derive(Debug, Clone, Serialize)]
+pub struct ComponentHealth {
+    pub backend: &'static str,
+    pub ok: bool,
 }
 
 fn serialize_image_base64<S>(image: &Bytes, serializer: S) -> Result<S::Ok, S::Error>

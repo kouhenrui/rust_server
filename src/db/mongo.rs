@@ -2,6 +2,7 @@
 
 use super::db::DbProvider;
 use crate::error::AppError;
+use crate::util::redact_url;
 use mongodb::{bson::doc, Client};
 
 #[derive(Clone)]
@@ -37,15 +38,4 @@ impl DbProvider for MongoDb {
             .map(|_| ())
             .map_err(|e| AppError::Internal(format!("mongodb ping: {e}")))
     }
-}
-
-fn redact_url(url: &str) -> String {
-    if let Some(at) = url.find('@') {
-        if let Some(scheme_end) = url.find("://") {
-            let scheme = &url[..scheme_end + 3];
-            let rest = &url[at + 1..];
-            return format!("{scheme}***@{rest}");
-        }
-    }
-    url.to_string()
 }

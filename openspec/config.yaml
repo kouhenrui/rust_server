@@ -4,16 +4,21 @@ schema: spec-driven
 context: |
   Tech stack: Rust 2021 edition, axum 0.7, tokio, image 0.25, imageproc 0.25,
   tracing-subscriber, reqwest (rustls-tls only), prost 0.13, redis 0.32, sqlx 0.8,
-  mongodb 3.2, nanoid.
+  mongodb 3.2, nanoid, bcrypt, jsonwebtoken, casbin.
   Domain: HTTP image processing server — `/img` transforms a source image
   (crop, resize, filters, watermark, output-format encoding).
   API style: unified `ApiResponse` envelope for JSON and Protobuf; GET uses
   query parameters, POST uses `application/x-protobuf`.
-  Architecture: `router.rs` + `controller/`, `response.rs` envelopes,
-  `middleware/` for trace_id and access logs, `logger/` for tracing init/macros,
+  Architecture: `router.rs` + `controller/`, `params.rs` for `/img` parameters,
+  `response.rs` envelopes, `middleware/` for trace_id and access logs,
+  `logger/` for tracing init/macros, `error.rs` for `AppError` + stable codes,
+  `auth/` for bcrypt + JWT (library; login API planned),
+  `util/` + `http_client/` for shared helpers,
+  `state.rs` for `AppState`, `FontCache`, `check_health`,
   pluggable `cache/` (disabled | memory | redis) and `db/` (postgres | mysql |
   sqlite | mongodb).
-  Non-goals: image storage as a product feature, signed URLs, multi-tenant auth.
+  Work plan: see `openspec/ROADMAP.md` (full module ↔ spec mapping table).
+  Non-goals: image storage as a product feature, signed URLs, multi-tenant RBAC.
 
 rules:
   proposal:

@@ -1,9 +1,11 @@
 //! Health check controller.
 
-use crate::response::{api_success, HealthData};
+use crate::state::AppState;
+use axum::extract::State;
 use axum::response::Response;
+use std::sync::Arc;
 
-/// 主动健康检查端点，返回统一信封 `{ code, message, data }`。
-pub async fn health() -> Response {
-    api_success(HealthData { status: "ok" })
+/// 主动健康检查：进程存活 + 缓存/数据库 ping 状态。
+pub async fn health(State(state): State<Arc<AppState>>) -> Response {
+    crate::ok!(state.check_health().await)
 }

@@ -21,7 +21,9 @@
 
 - [x] 4.1 Unit test: disabled backend rejected, sqlite pool exposes pool.
   (`src/db/db.rs`)
-- [x] 4.2 Integration tests use `sqlite::memory:`. (`tests/integration.rs`)
+- [x] 4.2 Integration tests use `sqlite::memory:` via env vars in
+  `tests/integration.rs`. (`tests/integration.rs`)
+- [x] 4.3 `AppState::test` helper for unit tests (`#[cfg(test)]` in `state.rs`).
 
 ## 5. Verification
 

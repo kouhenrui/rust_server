@@ -3,9 +3,10 @@
 ## 1. Response types
 
 - [x] 1.1 Define `ApiSuccess<T>`, `ApiErrorBody`, `ErrBody`, `ImageData`,
-  `HealthData` in `src/response.rs`.
+  `HealthData`, `ComponentHealth`, `ImageOutcome` in `src/response.rs`.
 - [x] 1.2 Implement `api_success`, `api_error`, `ImageOutcome` with JSON and
-  protobuf paths.
+  protobuf paths; `err.kind` from `AppError::code()`.
+- [x] 1.3 Export `ok!` / `err!` macros delegating to api_success/api_error.
 
 ## 2. Trace injection
 
@@ -16,4 +17,5 @@
 ## 3. Verification
 
 - [x] 3.1 Unit tests for success/error JSON shape in `src/response.rs`.
-- [x] 3.2 Integration tests in `tests/integration.rs` assert envelope fields.
+- [x] 3.2 Integration tests in `tests/integration.rs` assert envelope fields,
+  `x-trace-id` header, health `data.cache`/`data.database`, and image base64.

@@ -1,18 +1,22 @@
 //! HTTP access logging middleware: trace id + request parameter logs.
 
 use axum::body::Body;
-use axum::extract::Request;
+use axum::extract::{FromRequestParts, Request};
+use axum::http::request::Parts;
 use axum::middleware::Next;
 use axum::response::Response;
 use bytes::Bytes;
 use http_body_util::BodyExt;
 use prost::Message;
 use serde_json::{json, Value};
+use std::ops::Deref;
 use std::time::Instant;
 use tracing::Instrument;
 
+use crate::error::AppError;
 use crate::proto::api::{self, ImageRequest};
 use crate::response::{JSON_CONTENT_TYPE, PROTOBUF_CONTENT_TYPE};
+use async_trait::async_trait;
 
 /// Request / response header carrying the trace identifier.
 pub const TRACE_ID_HEADER: &str = "x-trace-id";
@@ -20,6 +24,30 @@ pub const TRACE_ID_HEADER: &str = "x-trace-id";
 /// Per-request trace identifier stored in request extensions.
 #[derive(Clone, Debug)]
 pub struct TraceId(pub String);
+
+impl Deref for TraceId {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for TraceId
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<TraceId>()
+            .cloned()
+            .ok_or_else(|| AppError::Internal("trace id missing from request extensions".into()))
+    }
+}
 
 /// Assign `trace_id`, log request params, inject id into the response.
 pub async fn logging_middleware(mut request: Request, next: Next) -> Response {
@@ -66,7 +94,7 @@ pub async fn logging_middleware(mut request: Request, next: Next) -> Response {
     let request = Request::from_parts(parts, Body::from(req_bytes));
     let started = Instant::now();
 
-    let span = tracing::info_span!(
+    let span = crate::span!(
         "http",
         trace_id = %trace_id,
         method = %method,

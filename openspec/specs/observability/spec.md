@@ -70,3 +70,13 @@ All routes MUST pass through `middleware::logging_middleware`, which:
 ### Requirement: No response-body logging
 
 The access middleware MUST NOT log response bodies.
+
+### Requirement: Supplemental macros
+
+The service MUST provide crate-root `span!`, `ok!`, and `err!` macros for
+spans and API responses (see `shared-infra` spec).
+
+### Requirement: TraceId extractor
+
+`middleware::TraceId` MUST implement axum `FromRequestParts` so handlers can
+read the trace id injected by the logging middleware.

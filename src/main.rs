@@ -1,8 +1,9 @@
 //! Binary entrypoint. Wires up tracing, builds [`AppState`], and starts axum.
 
+use axum::http::HeaderValue;
 use std::net::SocketAddr;
 use thumbor::{config::Config, logger, router, state::AppState};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 
 /// 进程入口。
 ///
@@ -16,11 +17,16 @@ async fn main() -> anyhow::Result<()> {
     logger::init();
 
     let config = Config::from_env();
+    if config.jwt_secret == "secret" {
+        thumbor::warn!(
+            "THUMBOR_JWT_SECRET is the default value; set a strong secret in production"
+        );
+    }
     thumbor::info!("config: {:?}", config);
     let bind_addr: SocketAddr = config.bind_addr;
 
-    let state = AppState::connect(config).await?;
-    let app = router::router(state).layer(CorsLayer::permissive());
+    let state = AppState::connect(config.clone()).await?;
+    let app = router::router(state).layer(cors_layer(&config.cors_origins));
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     thumbor::info!(%bind_addr, "listening");
@@ -28,6 +34,20 @@ async fn main() -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+fn cors_layer(origins: &[String]) -> CorsLayer {
+    if origins.is_empty() {
+        return CorsLayer::permissive();
+    }
+    let allowed: Vec<HeaderValue> = origins
+        .iter()
+        .filter_map(|o| o.parse().ok())
+        .collect();
+    CorsLayer::new()
+        .allow_origin(allowed)
+        .allow_methods(Any)
+        .allow_headers(Any)
 }
 
 /// 等待任意一种停机信号。

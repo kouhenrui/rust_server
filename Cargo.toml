@@ -37,6 +37,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "local-time"] }
 time = { version = "0.3", features = ["macros"] }
 anyhow = "1"
+async-trait = "0.1"
 bytes = "1"
 base64 = "0.22"
 http-body-util = "0.1"
@@ -52,6 +53,11 @@ redis = { version = "0.32.2", features = ["tokio-comp"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "any"] }
 mongodb = { version = "3.2", default-features = false, features = ["compat-3-0-0", "rustls-tls"] }
 dotenvy = "0.15.7"
+
+# Auth
+bcrypt = "0.16"
+jsonwebtoken = "9"
+casbin = { version = "2.20", default-features = false, features = ["runtime-tokio", "incremental"] }
 
 [build-dependencies]
 # Compiles proto/api.proto → generated Rust code in OUT_DIR, included by src/proto.rs

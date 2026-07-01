@@ -252,6 +252,24 @@ impl ImgParams {
             format,
         })
     }
+
+    /// Stable cache key from normalized transform parameters.
+    pub fn cache_key(&self) -> String {
+        let (tw, th) = self.target.unwrap_or((0, 0));
+        let crop = self
+            .crop
+            .map(|c| format!("{},{},{},{}", c.x, c.y, c.w, c.h))
+            .unwrap_or_default();
+        let wm = self
+            .watermark
+            .as_ref()
+            .map(|w| format!("{w:?}"))
+            .unwrap_or_default();
+        format!(
+            "img:v1:src={}:w={}:h={}:fit={:?}:crop={}:filters={:?}:wm={}:fmt={:?}",
+            self.src, tw, th, self.fit, crop, self.filters, wm, self.format
+        )
+    }
 }
 
 /// 把 `crop` 字符串解析成 [`CropRect`]。

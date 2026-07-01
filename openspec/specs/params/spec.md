@@ -1,0 +1,70 @@
+# Image Request Parameters
+
+## Purpose
+
+Define how `/img` query strings and protobuf `ImageRequest` fields are parsed
+into the shared [`ImgParams`] type used by the processing pipeline.
+
+## Requirements
+
+### Requirement: Query parameter parsing
+
+`params::ImgParams::parse` MUST convert `ImgParamsRaw` (axum `Query`) into
+validated `ImgParams`. Unknown query keys MUST be ignored. Semantic errors MUST
+return `AppError::BadRequest`.
+
+Supported query keys: `src`, `w`, `h`, `fit`, `crop`, `filters`, `watermark`,
+`format`.
+
+#### Scenario: missing src
+
+- GIVEN a `GET /img` request without `src`
+- WHEN `ImgParams::parse` runs
+- THEN the error is `AppError::BadRequest`
+
+#### Scenario: zero dimension
+
+- GIVEN `w=0` or `h=0`
+- WHEN `ImgParams::parse` runs
+- THEN the error is `AppError::BadRequest`
+
+#### Scenario: fit modes
+
+- GIVEN `fit` is absent, `cover`, `contain`, or `stretch`
+- WHEN parsing succeeds
+- THEN `ImgParams.fit` is the corresponding `FitMode`
+
+#### Scenario: crop rectangle
+
+- GIVEN `crop=x,y,w,h` with positive `w` and `h`
+- WHEN parsing succeeds
+- THEN `ImgParams.crop` is `Some(CropRect { x, y, w, h })`
+
+#### Scenario: watermark text
+
+- GIVEN `watermark=Hello@10,20`
+- WHEN parsing succeeds
+- THEN `ImgParams.watermark` is `Text { text: "Hello", x: 10, y: 20 }`
+
+#### Scenario: watermark image
+
+- GIVEN `watermark=image:logo.png@5,5`
+- WHEN parsing succeeds
+- THEN `ImgParams.watermark` is `Image { path: "logo.png", x: 5, y: 5 }`
+
+### Requirement: Protobuf conversion
+
+`controller/img.rs` MUST map `api::ImageRequest` to `ImgParams` via
+`img_request_to_params`, keeping the same validation semantics as the query
+path. GET and POST MUST share one internal `ImgParams` type.
+
+#### Scenario: shared pipeline
+
+- GIVEN equivalent GET query params and POST `ImageRequest` fields
+- WHEN both reach `process_image`
+- THEN the same transform/filter/watermark/encode steps run
+
+### Requirement: Filter chain delegation
+
+The `filters` query value MUST be parsed by `FilterChain::parse` in
+`proc/filter.rs` (see `image-filters` spec).

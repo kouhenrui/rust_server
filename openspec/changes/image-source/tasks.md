@@ -6,16 +6,15 @@
   `read_local`, `decode`.
 - [x] 1.2 `load_source` branches on `http://` / `https://` / `file://`
   prefix; falls through to the local-root + literal-path resolution.
-- [x] 1.3 `fetch_remote` calls `reqwest::Client::get(url)`, checks the
-  status, checks `Content-Length` if present, and finally collects
-  `bytes()` and re-checks the actual length.
+- [x] 1.3 `fetch_remote` uses `state.http.fetch(url, max_bytes)` via
+  [`HttpClient`](src/http_client.rs) (timeout + size cap).
 
 ## 2. Size cap and timeout
 
 - [x] 2.1 Both `fetch_remote` and `read_local` enforce
   `THUMBOR_MAX_SOURCE_BYTES` and return `AppError::SourceTooLarge` on
   overrun.
-- [x] 2.2 `AppState::new` builds the `reqwest::Client` with
+- [x] 2.2 `AppState::connect` builds `HttpClient` with
   `THUMBOR_FETCH_TIMEOUT_MS`. A timeout surfaces as
   `AppError::Upstream` → 502 `upstream_failed`.
 

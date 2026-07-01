@@ -1,6 +1,7 @@
 //! Cache 模块配置：后端选择与各实现专有参数。
 
 use crate::error::AppError;
+use crate::util::{parse_or_warn, redact_url};
 use redis::{ConnectionAddr, ConnectionInfo, IntoConnectionInfo, RedisConnectionInfo};
 use std::time::Duration;
 
@@ -127,15 +128,13 @@ impl RedisConfig {
             cfg.host = v;
         }
         if let Ok(v) = std::env::var("THUMBOR_REDIS_PORT") {
-            match v.parse() {
-                Ok(p) => cfg.port = p,
-                Err(e) => crate::warn!(error = %e, "invalid THUMBOR_REDIS_PORT"),
+            if let Some(p) = parse_or_warn(&v, "invalid THUMBOR_REDIS_PORT") {
+                cfg.port = p;
             }
         }
         if let Ok(v) = std::env::var("THUMBOR_REDIS_DB") {
-            match v.parse() {
-                Ok(db) => cfg.db = db,
-                Err(e) => crate::warn!(error = %e, "invalid THUMBOR_REDIS_DB"),
+            if let Some(db) = parse_or_warn(&v, "invalid THUMBOR_REDIS_DB") {
+                cfg.db = db;
             }
         }
         cfg.auth = CacheAuth::from_env("THUMBOR_REDIS_USERNAME", "THUMBOR_REDIS_PASSWORD");
@@ -162,7 +161,7 @@ impl RedisConfig {
 
     pub fn redacted_display(&self) -> String {
         if let Some(url) = &self.url {
-            return redact_url_credentials(url);
+            return redact_url(url);
         }
         format!(
             "redis://{}{}:{}/{}",
@@ -199,40 +198,20 @@ impl MemoryConfig {
             match v.parse() {
                 Ok(n) if n > 0 => cfg.max_entries = n,
                 Ok(_) => crate::warn!("THUMBOR_CACHE_MEMORY_MAX_ENTRIES must be > 0"),
-                Err(e) => crate::warn!(error = %e, "invalid THUMBOR_CACHE_MEMORY_MAX_ENTRIES"),
+                Err(_) => {
+                    let _ = parse_or_warn::<usize>(&v, "invalid THUMBOR_CACHE_MEMORY_MAX_ENTRIES");
+                }
             }
         }
         if let Ok(v) = std::env::var("THUMBOR_CACHE_MEMORY_TTL_SECS") {
             match v.parse::<u64>() {
                 Ok(0) => cfg.default_ttl = None,
                 Ok(secs) => cfg.default_ttl = Some(Duration::from_secs(secs)),
-                Err(e) => crate::warn!(error = %e, "invalid THUMBOR_CACHE_MEMORY_TTL_SECS"),
+                Err(_) => {
+                    let _ = parse_or_warn::<u64>(&v, "invalid THUMBOR_CACHE_MEMORY_TTL_SECS");
+                }
             }
         }
         cfg
     }
-}
-
-fn redact_url_credentials(url: &str) -> String {
-    if let Some(scheme_end) = url.find("://") {
-        let (scheme, rest) = url.split_at(scheme_end + 3);
-        if let Some(at) = rest.find('@') {
-            let (auth, host_part) = rest.split_at(at + 1);
-            let user = auth
-                .strip_suffix('@')
-                .and_then(|a| a.split(':').next())
-                .unwrap_or("");
-            let redacted = if auth.contains(':') {
-                if user.is_empty() {
-                    ":***@".to_string()
-                } else {
-                    format!("{user}:***@")
-                }
-            } else {
-                format!("{auth}@")
-            };
-            return format!("{scheme}{redacted}{host_part}");
-        }
-    }
-    url.to_string()
 }

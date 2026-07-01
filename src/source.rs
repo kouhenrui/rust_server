@@ -28,7 +28,7 @@ pub async fn load_source(state: &AppState, src: &str) -> AppResult<Vec<u8>> {
         } else {
             format!("https://{rest}")
         };
-        return fetch_remote(&state.http, &url, state.config.max_source_bytes).await;
+        return state.http.fetch(&url, state.config.max_source_bytes).await;
     }
 
     if let Some(path) = src.strip_prefix("file://") {
@@ -40,33 +40,6 @@ pub async fn load_source(state: &AppState, src: &str) -> AppResult<Vec<u8>> {
         None => std::path::PathBuf::from(src),
     };
     read_local(resolved.to_str().unwrap_or(src), state.config.max_source_bytes)
-}
-
-/// 用 `reqwest::Client` 拉远程源，做大小限制。
-///
-/// **两次**检查 `max_bytes`：先看 `Content-Length`（早失败，省流量），
-/// 再看实际 `bytes.len()`（万一上游撒谎或没给 content-length）。
-/// 两次都需要是因为只信 `Content-Length` 等于相信上游没说谎，
-/// 很多 CDN / 反代会改这个头或干脆省略。
-async fn fetch_remote(
-    client: &reqwest::Client,
-    url: &str,
-    max_bytes: usize,
-) -> AppResult<Vec<u8>> {
-    let resp = client.get(url).send().await?;
-    if !resp.status().is_success() {
-        return Err(AppError::Upstream(format!("status {}", resp.status())));
-    }
-    if let Some(len) = resp.content_length() {
-        if len as usize > max_bytes {
-            return Err(AppError::SourceTooLarge { max: max_bytes });
-        }
-    }
-    let bytes = resp.bytes().await?;
-    if bytes.len() > max_bytes {
-        return Err(AppError::SourceTooLarge { max: max_bytes });
-    }
-    Ok(bytes.to_vec())
 }
 
 /// 读本地文件，同样做大小检查。

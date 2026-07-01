@@ -49,3 +49,33 @@ macro_rules! error {
         )
     };
 }
+
+/// Structured tracing span with call-site metadata.
+#[macro_export]
+macro_rules! span {
+    ($name:expr, $($field:tt)*) => {
+        tracing::info_span!(
+            $name,
+            module = module_path!(),
+            file = file!(),
+            line = line!(),
+            $($field)*
+        )
+    };
+}
+
+/// Shorthand for [`crate::response::api_success`].
+#[macro_export]
+macro_rules! ok {
+    ($data:expr) => {
+        $crate::response::api_success($data)
+    };
+}
+
+/// Shorthand for [`crate::response::api_error`].
+#[macro_export]
+macro_rules! err {
+    ($err:expr) => {
+        $crate::response::api_error(&$err)
+    };
+}

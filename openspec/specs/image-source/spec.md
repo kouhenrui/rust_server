@@ -7,8 +7,10 @@ Define how the service obtains the bytes of the source image referenced by the
 ## Requirements
 
 ### Requirement: HTTP(S) sources
+
 The service MUST accept `http://` and `https://` URLs as the `src` value when
-remote sources are enabled.
+remote sources are enabled. Remote fetches MUST go through
+`http_client::HttpClient::fetch` with configured timeout and size limits.
 
 #### Scenario: fetch remote URL
 - GIVEN remote sources are enabled

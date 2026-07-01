@@ -10,6 +10,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::util::parse_or_warn;
+
 /// Runtime configuration. Construct via [`Config::from_env`] or [`Config::default`].
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -35,7 +37,20 @@ pub struct Config {
 
     pub log_level: String,
 
-    pub jwt_secret:String,
+    /// HMAC secret for JWT signing (`THUMBOR_JWT_SECRET`).
+    pub jwt_secret: String,
+
+    /// JWT lifetime in seconds (`THUMBOR_JWT_EXPIRE_SECS`, default 86400).
+    pub jwt_expire_secs: u64,
+
+    /// Comma-separated allowed CORS origins (`THUMBOR_CORS_ORIGINS`); empty = permissive.
+    pub cors_origins: Vec<String>,
+
+    /// TTL for cached `/img` results in seconds; `None` = no expiry. (`THUMBOR_IMG_CACHE_TTL_SECS`)
+    pub img_cache_ttl_secs: Option<u64>,
+
+    /// Casbin model file (`THUMBOR_CASBIN_MODEL`, default `config/casbin_model.conf`).
+    pub casbin_model: PathBuf,
 }
 
 /// 构造一组**可直接部署**的默认值。
@@ -54,6 +69,10 @@ impl Default for Config {
             local_source_root: None,
             log_level: "info".to_string(),
             jwt_secret: "secret".to_string(),
+            jwt_expire_secs: 86400,
+            cors_origins: Vec::new(),
+            img_cache_ttl_secs: Some(3600),
+            casbin_model: PathBuf::from("config/casbin_model.conf"),
         }
     }
 }
@@ -87,21 +106,18 @@ impl Config {
     pub fn from_env() -> Self {
         let mut cfg = Self::default();
         if let Ok(v) = std::env::var("THUMBOR_BIND") {
-            match v.parse() {
-                Ok(addr) => cfg.bind_addr = addr,
-                Err(e) => crate::warn!(value = %v, error = %e, "invalid THUMBOR_BIND"),
+            if let Some(addr) = parse_or_warn(&v, "invalid THUMBOR_BIND") {
+                cfg.bind_addr = addr;
             }
         }
         if let Ok(v) = std::env::var("THUMBOR_MAX_SOURCE_BYTES") {
-            match v.parse() {
-                Ok(n) => cfg.max_source_bytes = n,
-                Err(e) => crate::warn!(error = %e, "invalid THUMBOR_MAX_SOURCE_BYTES"),
+            if let Some(n) = parse_or_warn(&v, "invalid THUMBOR_MAX_SOURCE_BYTES") {
+                cfg.max_source_bytes = n;
             }
         }
         if let Ok(v) = std::env::var("THUMBOR_FETCH_TIMEOUT_MS") {
-            match v.parse::<u64>() {
-                Ok(ms) => cfg.fetch_timeout = Duration::from_millis(ms),
-                Err(e) => crate::warn!(error = %e, "invalid THUMBOR_FETCH_TIMEOUT_MS"),
+            if let Some(ms) = parse_or_warn::<u64>(&v, "invalid THUMBOR_FETCH_TIMEOUT_MS") {
+                cfg.fetch_timeout = Duration::from_millis(ms);
             }
         }
         if let Ok(v) = std::env::var("THUMBOR_WATERMARK_FONT") {
@@ -117,6 +133,38 @@ impl Config {
         }
         if let Ok(v) = std::env::var("THUMBOR_LOG_LEVEL") {
             cfg.log_level = v.to_string();
+        }
+        if let Ok(v) = std::env::var("THUMBOR_JWT_SECRET") {
+            if !v.is_empty() {
+                cfg.jwt_secret = v;
+            }
+        }
+        if let Ok(v) = std::env::var("THUMBOR_JWT_EXPIRE_SECS") {
+            if let Some(secs) = parse_or_warn::<u64>(&v, "invalid THUMBOR_JWT_EXPIRE_SECS") {
+                cfg.jwt_expire_secs = secs;
+            }
+        }
+        if let Ok(v) = std::env::var("THUMBOR_CORS_ORIGINS") {
+            cfg.cors_origins = v
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+        }
+        if let Ok(v) = std::env::var("THUMBOR_IMG_CACHE_TTL_SECS") {
+            match v.parse::<u64>() {
+                Ok(0) => cfg.img_cache_ttl_secs = None,
+                Ok(secs) => cfg.img_cache_ttl_secs = Some(secs),
+                Err(_) => {
+                    let _ = parse_or_warn::<u64>(&v, "invalid THUMBOR_IMG_CACHE_TTL_SECS");
+                }
+            }
+        }
+        if let Ok(v) = std::env::var("THUMBOR_CASBIN_MODEL") {
+            if !v.is_empty() {
+                cfg.casbin_model = PathBuf::from(v);
+            }
         }
         cfg
     }

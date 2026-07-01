@@ -74,3 +74,8 @@ otherwise it MUST generate one (nanoid).
 Envelope rendering MUST be centralized in `src/response.rs`. Controllers MUST
 return `Response` via `api_success`, `api_error`, `ImageOutcome`, or the
 protobuf equivalents — not ad-hoc JSON in handlers.
+
+### Requirement: Health payload
+
+`HealthData` MUST include `status`, `cache`, and `database` fields where each
+dependency reports `backend` name and `ok` ping result.

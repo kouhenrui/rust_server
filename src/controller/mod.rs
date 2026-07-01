@@ -4,3 +4,4 @@
 
 pub mod health;
 pub mod img;
+pub mod auth;

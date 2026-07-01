@@ -53,7 +53,10 @@ The service MUST read at least these variables:
 | `THUMBOR_WATERMARK_FONT` | _unset_ | path to a TTF for text watermarks |
 | `THUMBOR_ALLOW_REMOTE` | `true` | allow `http(s)://` sources |
 | `THUMBOR_LOCAL_SOURCE_ROOT` | _unset_ | base for relative local sources |
-| `THUMBOR_LOG_LEVEL` | _unset_ | fallback log level when `RUST_LOG` absent |
+| `THUMBOR_LOG_LEVEL` | `info` | fallback log level when `RUST_LOG` absent |
+| `THUMBOR_DOTENV_PATH` | `.env` | path to dotenv file loaded at startup |
+| `THUMBOR_JWT_SECRET` | `secret` | HMAC secret for JWT (override in prod) |
+| `THUMBOR_JWT_EXPIRE_SECS` | `86400` | JWT lifetime in seconds |
 
 #### Scenario: defaults match the documentation
 
@@ -73,3 +76,26 @@ initialization so `RUST_LOG` and `THUMBOR_*` values are available at startup.
 - GIVEN a `.env` file sets `RUST_LOG=debug`
 - WHEN `main` starts
 - THEN `Config::load_dotenv()` runs before `logger::init()`
+
+### Requirement: Custom dotenv path
+
+`Config::load_dotenv` MUST read `THUMBOR_DOTENV_PATH` when set; otherwise
+default to `.env`. Missing files MUST be ignored without failing startup.
+
+#### Scenario: alternate env file
+
+- GIVEN `THUMBOR_DOTENV_PATH=.env.local` and the file exists
+- WHEN the binary starts
+- THEN variables from `.env.local` are loaded before logger init
+
+### Requirement: Graceful shutdown
+
+The binary MUST listen for SIGINT and SIGTERM (Unix) and shut down the axum
+server gracefully via `with_graceful_shutdown`, allowing in-flight requests to
+complete.
+
+#### Scenario: container stop
+
+- GIVEN the service is running under a process manager
+- WHEN SIGTERM is received
+- THEN a shutdown log is emitted and the listener stops accepting new connections

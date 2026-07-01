@@ -10,6 +10,7 @@ use prost::Message;
 use serde_json::Value;
 use tower::ServiceExt;
 
+use thumbor::auth::upsert_user_for_backend;
 use thumbor::config::Config;
 use thumbor::proto::api::{ApiResponse, ImageRequest};
 use thumbor::response::{SUCCESS_CODE, SUCCESS_MESSAGE};
@@ -34,12 +35,20 @@ fn make_test_root() -> PathBuf {
 
 async fn app_with_root(root: PathBuf) -> axum::Router {
     std::env::set_var("THUMBOR_DB_BACKEND", "sqlite");
-    std::env::set_var("THUMBOR_DB_URL", "sqlite::memory:");
+    std::env::set_var("THUMBOR_DB_URL", "sqlite:file:memdb1?mode=memory&cache=shared");
     let cfg = Config {
         local_source_root: Some(root),
         ..Config::default()
     };
     let state = AppState::connect(cfg).await.unwrap();
+    upsert_user_for_backend(
+        state.db.sql_pool().unwrap(),
+        state.db.backend_name(),
+        "testuser",
+        "testpass",
+    )
+    .await
+    .unwrap();
     thumbor::router::router(state)
 }
 
@@ -66,6 +75,8 @@ async fn health_returns_unified_envelope() {
     assert_eq!(json["code"], SUCCESS_CODE);
     assert_eq!(json["message"], SUCCESS_MESSAGE);
     assert_eq!(json["data"]["status"], "ok");
+    assert_eq!(json["data"]["cache"]["ok"], true);
+    assert_eq!(json["data"]["database"]["ok"], true);
     assert!(json.get("err").is_none());
     assert!(json["trace_id"].as_str().is_some_and(|s| !s.is_empty()));
 
@@ -259,6 +270,176 @@ async fn get_img_error_returns_unified_json_envelope() {
     assert_eq!(json["err"]["kind"], "bad_request");
     assert!(json.get("data").is_none());
     assert!(json["trace_id"].as_str().is_some_and(|s| !s.is_empty()));
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn login_returns_token() {
+    let root = make_test_root();
+    let app = app_with_root(root.clone()).await;
+
+    let body = serde_json::json!({"username": "testuser", "password": "testpass"});
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["code"], SUCCESS_CODE);
+    assert!(json["data"]["token"].as_str().is_some_and(|s| !s.is_empty()));
+    assert!(json["data"]["expires_at"].as_u64().is_some());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn login_wrong_password_returns_unauthorized() {
+    let root = make_test_root();
+    let app = app_with_root(root.clone()).await;
+
+    let body = serde_json::json!({"username": "testuser", "password": "wrong"});
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["err"]["kind"], "unauthorized");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn me_requires_bearer_token() {
+    let root = make_test_root();
+    let app = app_with_root(root.clone()).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn me_returns_profile_with_valid_token() {
+    let root = make_test_root();
+    let app = app_with_root(root.clone()).await;
+
+    let login_body = serde_json::json!({"username": "testuser", "password": "testpass"});
+    let login_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header("content-type", "application/json")
+                .body(Body::from(login_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let login_bytes = to_bytes(login_resp.into_body(), 4096).await.unwrap();
+    let login_json: Value = serde_json::from_slice(&login_bytes).unwrap();
+    let token = login_json["data"]["token"].as_str().unwrap();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/me")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["data"]["username"], "testuser");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn img_result_is_cached_with_memory_backend() {
+    let root = make_test_root();
+    std::env::set_var("THUMBOR_CACHE_BACKEND", "memory");
+    std::env::set_var("THUMBOR_DB_BACKEND", "sqlite");
+    std::env::set_var("THUMBOR_DB_URL", "sqlite:file:memdb1?mode=memory&cache=shared");
+
+    let cfg = Config {
+        local_source_root: Some(root.clone()),
+        ..Config::default()
+    };
+    let state = AppState::connect(cfg).await.unwrap();
+    let app = thumbor::router::router(state);
+
+    let qs = "src=tiny.png&w=4&h=4";
+    let uri = format!("/img?{qs}");
+
+    let first = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&uri)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+
+    std::fs::remove_file(root.join("tiny.png")).unwrap();
+
+    let second = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&uri)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+
+    let bytes = to_bytes(second.into_body(), 8 * 1024 * 1024)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["code"], SUCCESS_CODE);
 
     let _ = std::fs::remove_dir_all(&root);
 }

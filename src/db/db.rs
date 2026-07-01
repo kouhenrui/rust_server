@@ -90,7 +90,7 @@ mod tests {
 
     fn sqlite_memory_config() -> DbBackendConfig {
         DbBackendConfig::Sqlite(DbAuth {
-            url: Some("sqlite::memory:".into()),
+            url: Some("sqlite:file:memdb1?mode=memory&cache=shared".into()),
             ..Default::default()
         })
     }

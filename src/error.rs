@@ -6,6 +6,29 @@ use axum::response::{IntoResponse, Response};
 /// Crate-wide result alias.
 pub type AppResult<T> = std::result::Result<T, AppError>;
 
+/// Convenience conversions on `Result` for handler code.
+pub trait AppResultExt<T> {
+    /// Map any error into [`AppError::BadRequest`] with `msg`.
+    fn bad_request(self, msg: impl Into<String>) -> AppResult<T>;
+}
+
+impl<T, E: std::fmt::Display> AppResultExt<T> for std::result::Result<T, E> {
+    fn bad_request(self, msg: impl Into<String>) -> AppResult<T> {
+        self.map_err(|e| AppError::BadRequest(format!("{}: {e}", msg.into())))
+    }
+}
+
+/// Map a concrete error type into [`AppError::BadRequest`].
+pub trait AppResultMapExt<T, E> {
+    fn map_bad_request(self, f: impl FnOnce(E) -> String) -> AppResult<T>;
+}
+
+impl<T, E: std::fmt::Display> AppResultMapExt<T, E> for std::result::Result<T, E> {
+    fn map_bad_request(self, f: impl FnOnce(E) -> String) -> AppResult<T> {
+        self.map_err(|e| AppError::BadRequest(f(e)))
+    }
+}
+
 /// All errors a handler can produce. Use `?` to propagate; the axum
 /// `IntoResponse` impl turns these into structured JSON responses.
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +60,15 @@ pub enum AppError {
     #[error("upstream fetch failed: {0}")]
     Upstream(String),
 
+    #[error("unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("invalid token: {0}")]
+    InvalidToken(String),
+
+    #[error("forbidden: {0}")]
+    Forbidden(String),
+
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -67,6 +99,8 @@ impl AppError {
             AppError::RemoteDisabled
             | AppError::WatermarkFontMissing
             | AppError::Upstream(_) => StatusCode::BAD_GATEWAY,
+            AppError::Unauthorized(_) | AppError::InvalidToken(_) => StatusCode::UNAUTHORIZED,
+            AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -94,6 +128,9 @@ impl AppError {
             AppError::WatermarkFontMissing => "watermark_font_missing",
             AppError::Filter(_) => "invalid_filter",
             AppError::Upstream(_) => "upstream_failed",
+            AppError::Unauthorized(_) => "unauthorized",
+            AppError::InvalidToken(_) => "invalid_token",
+            AppError::Forbidden(_) => "forbidden",
             AppError::Internal(_) => "internal",
         }
     }

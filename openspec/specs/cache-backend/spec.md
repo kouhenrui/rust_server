@@ -59,6 +59,9 @@ All backends MUST implement `cache::Cache` with `get`, `set`, `delete`, and
 `ping`. The cache is connected during `AppState::connect` and held on
 `AppState`.
 
+**Note:** As of current code, the `/img` pipeline does not yet read or write
+the cache; see `changes/cache-backend/tasks.md` §6.
+
 #### Scenario: disabled ping succeeds
 
 - GIVEN the disabled backend

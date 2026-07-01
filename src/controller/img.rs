@@ -156,6 +156,16 @@ pub async fn process_image(
     state: &AppState,
     params: ImgParams,
 ) -> AppResult<(Bytes, OutputFormat, &'static str)> {
+    let cache_key = params.cache_key();
+
+    if state.cache.is_enabled() {
+        if let Some(cached) = state.cache.get(&cache_key).await? {
+            if let Ok(hit) = unpack_cached(&cached, params.format) {
+                return Ok(hit);
+            }
+        }
+    }
+
     let bytes = source::load_source(state, &params.src).await?;
     let mut img = source::decode(&bytes)?;
 
@@ -167,7 +177,35 @@ pub async fn process_image(
     }
 
     let (body, content_type) = encode(&img, params.format)?;
+
+    if state.cache.is_enabled() {
+        let packed = pack_cached(&body, content_type);
+        state
+            .cache
+            .set(&cache_key, &packed, state.img_cache_ttl_secs)
+            .await?;
+    }
+
     Ok((body, params.format, content_type))
+}
+
+fn pack_cached(body: &[u8], content_type: &str) -> Vec<u8> {
+    let mut v = Vec::with_capacity(content_type.len() + 1 + body.len());
+    v.extend_from_slice(content_type.as_bytes());
+    v.push(0);
+    v.extend_from_slice(body);
+    v
+}
+
+fn unpack_cached(cached: &[u8], format: OutputFormat) -> AppResult<(Bytes, OutputFormat, &'static str)> {
+    let sep = cached
+        .iter()
+        .position(|&b| b == 0)
+        .ok_or_else(|| AppError::Internal("corrupt image cache entry".into()))?;
+    let _content_type = std::str::from_utf8(&cached[..sep])
+        .map_err(|e| AppError::Internal(format!("corrupt cache content-type: {e}")))?;
+    let body = Bytes::copy_from_slice(&cached[sep + 1..]);
+    Ok((body, format, format.content_type()))
 }
 
 /// 把 `DynamicImage` 编码成目标格式的字节。

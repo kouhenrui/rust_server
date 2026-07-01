@@ -4,7 +4,8 @@
 
 - [x] 1.1 Create `src/logger/` with `config.rs`, `formatter.rs`, `init.rs`,
   `layer.rs`, `macros.rs`. (`src/logger/`)
-- [x] 1.2 `logger::init()` registers global subscriber from `LoggerConfig`.
+- [x] 1.2 `logger::init()` registers global subscriber from `LoggerConfig::from_env`
+  (`RUST_LOG` or `THUMBOR_LOG_LEVEL`).
 - [x] 1.3 Export `trace!`, `debug!`, `info!`, `warn!`, `error!` at crate root.
 
 ## 2. HTTP middleware
@@ -19,6 +20,12 @@
 - [x] 3.1 Replace direct `tracing::info!` / `warn!` with crate macros in
   `main.rs`, `config.rs`, `state.rs`, `cache/`, `db/`.
 
-## 4. Verification
+## 4. Supplemental macros and extractors
 
-- [x] 4.1 `cargo test` passes including middleware unit tests.
+- [x] 4.1 Add `span!`, `ok!`, `err!` macros (`src/logger/macros.rs`).
+- [x] 4.2 `TraceId` implements `FromRequestParts` (`src/middleware/middleware.rs`).
+- [x] 4.3 Middleware uses `crate::span!` for HTTP spans.
+
+## 5. Verification
+
+- [x] 5.1 `cargo test` passes including middleware unit tests.

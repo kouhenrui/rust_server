@@ -1,10 +1,13 @@
 //! Shared state handed to every handler. Cloned cheaply (HTTP client is
 //! internally `Arc`-backed, font is loaded once into a `FontRef`).
 
+use crate::auth::{CasbinAuth, JwtAuth};
 use crate::cache::{Cache, CacheBackendConfig};
 use crate::config::Config;
 use crate::db::{Db, DbBackendConfig};
 use crate::error::AppError;
+use crate::http_client::HttpClient;
+use crate::response::{ComponentHealth, HealthData};
 use imageproc::image::ImageFormat;
 use once_cell::sync::OnceCell;
 
@@ -46,10 +49,13 @@ impl Default for FontCache {
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
-    pub http: reqwest::Client,
+    pub http: HttpClient,
     pub fonts: std::sync::Arc<FontCache>,
     pub cache: Cache,
     pub db: Db,
+    pub jwt: JwtAuth,
+    pub casbin: CasbinAuth,
+    pub img_cache_ttl_secs: Option<u64>,
 }
 
 impl AppState {
@@ -63,17 +69,52 @@ impl AppState {
         let db = Db::connect(&db_cfg).await?;
         crate::info!(backend = %db.backend_name(), "database ready");
 
-        let http = reqwest::Client::builder()
-            .timeout(config.fetch_timeout)
-            .build()
-            .map_err(|e| AppError::Internal(format!("reqwest builder: {e}")))?;
-        Ok(Self {
-            config,
+        let http = HttpClient::build(config.fetch_timeout)?;
+        let img_cache_ttl_secs = config.img_cache_ttl_secs;
+
+        if let Some(pool) = db.sql_pool() {
+            crate::auth::migrate(pool, db.backend_name()).await?;
+        }
+
+        let casbin = match db.sql_pool() {
+            Some(pool) => CasbinAuth::new(&config, pool, db.backend_name()).await?,
+            None => {
+                return Err(AppError::Internal(
+                    "casbin policy storage requires a SQL database backend".into(),
+                ));
+            }
+        };
+
+        let state = Self {
+            config: config.clone(),
             http,
             fonts: std::sync::Arc::new(FontCache::new()),
             cache,
             db,
-        })
+            jwt: JwtAuth::new(&config),
+            casbin,
+            img_cache_ttl_secs,
+        };
+
+        crate::controller::auth::bootstrap_admin(&state).await?;
+        Ok(state)
+    }
+
+    /// Ping cache and database; used by `/health`.
+    pub async fn check_health(&self) -> HealthData {
+        let cache_ok = self.cache.ping().await.is_ok();
+        let db_ok = self.db.ping().await.is_ok();
+        HealthData {
+            status: if cache_ok && db_ok { "ok" } else { "degraded" },
+            cache: ComponentHealth {
+                backend: self.cache.backend_name(),
+                ok: cache_ok,
+            },
+            database: ComponentHealth {
+                backend: self.db.backend_name(),
+                ok: db_ok,
+            },
+        }
     }
 
     /// 通过 magic number 嗅探图像格式。
@@ -93,7 +134,7 @@ impl AppState {
     /// 测试用：内存 SQLite + 禁用缓存，避免依赖外部服务。
     pub async fn test(config: Config) -> Result<Self, AppError> {
         std::env::set_var("THUMBOR_DB_BACKEND", "sqlite");
-        std::env::set_var("THUMBOR_DB_URL", "sqlite::memory:");
+        std::env::set_var("THUMBOR_DB_URL", "sqlite:file:memdb1?mode=memory&cache=shared");
         Self::connect(config).await
     }
 }

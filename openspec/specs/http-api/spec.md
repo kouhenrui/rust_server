@@ -9,7 +9,8 @@ Define the public HTTP surface exposed by the image processing service.
 ### Requirement: Health endpoint
 
 The service MUST expose `GET /health` that returns HTTP 200 with the unified
-JSON success envelope. The `data` field MUST contain `{ "status": "ok" }`.
+JSON success envelope. The `data` field MUST contain `status`, `cache`, and
+`database` dependency health objects.
 
 #### Scenario: liveness check
 
@@ -17,7 +18,10 @@ JSON success envelope. The `data` field MUST contain `{ "status": "ok" }`.
 - WHEN a client sends `GET /health`
 - THEN the response status is 200
 - AND `Content-Type` is `application/json`
-- AND the body matches `{ "code": 0, "message": "success", "data": { "status": "ok" }, "trace_id": "<non-empty>" }`
+- AND `data.status` is `"ok"` when cache and database ping succeed
+- AND `data.cache` contains `{ "backend": "<name>", "ok": true|false }`
+- AND `data.database` contains `{ "backend": "<name>", "ok": true|false }`
+- AND `trace_id` is non-empty
 
 ### Requirement: Image processing endpoint (GET)
 
@@ -70,6 +74,11 @@ protobuf envelope with the same semantic fields as the JSON envelope.
 
 HTTP routes MUST be registered in `src/router.rs`. Handlers MUST live under
 `src/controller/`. Access logging middleware MUST wrap all routes.
+
+### Requirement: Processing pipeline
+
+Image handlers MUST delegate transformation to `controller::img::process_image`
+after parsing parameters (see `image-pipeline` and `params` specs).
 
 #### Scenario: router wiring
 
