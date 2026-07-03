@@ -1,4 +1,7 @@
 //! Casbin RBAC enforcer (RESTful model with keyMatch2).
+//!
+//! 策略持久化在关系型数据库的 `casbin_rule` 表（PostgreSQL / MySQL / SQLite），
+//! 不支持 MongoDB。
 
 use crate::config::Config;
 use crate::error::{AppError, AppResult};
@@ -9,7 +12,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::casbin_adapter::SqlxAnyAdapter;
-use super::casbin_db::{migrate, seed_if_empty};
+use super::casbin_db::{seed_if_empty};
+use crate::entity::SqlBackend;
 
 const DEFAULT_MODEL: &str = include_str!("../../config/casbin_model.conf");
 
@@ -20,9 +24,8 @@ pub struct CasbinAuth {
 }
 
 impl CasbinAuth {
-    /// Load model from file and policies from the `casbin_rule` database table.
-    pub async fn new(config: &Config, pool: &AnyPool, backend: &str) -> AppResult<Self> {
-        migrate(pool, backend).await?;
+    /// Load model from file and policies from the `casbin_rule` SQL table.
+    pub async fn new(config: &Config, pool: &AnyPool, backend: SqlBackend) -> AppResult<Self> {
         seed_if_empty(pool, backend).await?;
 
         let model = load_model(&config.casbin_model).await?;
@@ -76,7 +79,10 @@ mod tests {
         let pool = AnyPool::connect("sqlite:file:memdb3?mode=memory&cache=shared")
             .await
             .unwrap();
-        CasbinAuth::new(&Config::default(), &pool, "sqlite")
+        crate::entity::migrate(&pool, SqlBackend::Sqlite)
+            .await
+            .unwrap();
+        CasbinAuth::new(&Config::default(), &pool, SqlBackend::Sqlite)
             .await
             .unwrap()
     }

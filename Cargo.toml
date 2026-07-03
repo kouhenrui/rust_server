@@ -50,7 +50,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 # Protobuf wire format (POST /img with Content-Type: application/x-protobuf)
 prost = "0.13"
 redis = { version = "0.32.2", features = ["tokio-comp"] }
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "any"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "any", "derive"] }
 mongodb = { version = "3.2", default-features = false, features = ["compat-3-0-0", "rustls-tls"] }
 dotenvy = "0.15.7"
 

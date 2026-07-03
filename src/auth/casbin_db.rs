@@ -1,5 +1,6 @@
-//! Casbin `casbin_rule` table migration and default policy seeding.
+//! Casbin `casbin_rule` 默认策略种子。
 
+use crate::entity::SqlBackend;
 use crate::error::{AppError, AppResult};
 use sqlx::AnyPool;
 
@@ -16,69 +17,8 @@ pub const DEFAULT_POLICIES: &[(&str, &[&str])] = &[
     ("g", &["testuser", "user"]),
 ];
 
-/// Create the Casbin policy table for the active SQL backend.
-pub async fn migrate(pool: &AnyPool, backend: &str) -> AppResult<()> {
-    let sql = match backend {
-        "sqlite" => {
-            r#"
-            CREATE TABLE IF NOT EXISTS casbin_rule (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ptype VARCHAR(32) NOT NULL,
-                v0 VARCHAR(255) NOT NULL DEFAULT '',
-                v1 VARCHAR(255) NOT NULL DEFAULT '',
-                v2 VARCHAR(255) NOT NULL DEFAULT '',
-                v3 VARCHAR(255) NOT NULL DEFAULT '',
-                v4 VARCHAR(255) NOT NULL DEFAULT '',
-                v5 VARCHAR(255) NOT NULL DEFAULT '',
-                UNIQUE(ptype, v0, v1, v2, v3, v4, v5)
-            )
-            "#
-        }
-        "postgres" => {
-            r#"
-            CREATE TABLE IF NOT EXISTS casbin_rule (
-                id BIGSERIAL PRIMARY KEY,
-                ptype VARCHAR(32) NOT NULL,
-                v0 VARCHAR(255) NOT NULL DEFAULT '',
-                v1 VARCHAR(255) NOT NULL DEFAULT '',
-                v2 VARCHAR(255) NOT NULL DEFAULT '',
-                v3 VARCHAR(255) NOT NULL DEFAULT '',
-                v4 VARCHAR(255) NOT NULL DEFAULT '',
-                v5 VARCHAR(255) NOT NULL DEFAULT '',
-                CONSTRAINT casbin_rule_unique UNIQUE(ptype, v0, v1, v2, v3, v4, v5)
-            )
-            "#
-        }
-        "mysql" => {
-            r#"
-            CREATE TABLE IF NOT EXISTS casbin_rule (
-                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                ptype VARCHAR(32) NOT NULL,
-                v0 VARCHAR(255) NOT NULL DEFAULT '',
-                v1 VARCHAR(255) NOT NULL DEFAULT '',
-                v2 VARCHAR(255) NOT NULL DEFAULT '',
-                v3 VARCHAR(255) NOT NULL DEFAULT '',
-                v4 VARCHAR(255) NOT NULL DEFAULT '',
-                v5 VARCHAR(255) NOT NULL DEFAULT '',
-                UNIQUE KEY casbin_rule_unique (ptype, v0, v1, v2, v3, v4, v5)
-            )
-            "#
-        }
-        other => {
-            return Err(AppError::Internal(format!(
-                "casbin policy storage not supported for db backend '{other}'"
-            )));
-        }
-    };
-    sqlx::query(sql)
-        .execute(pool)
-        .await
-        .map_err(|e| AppError::Internal(format!("casbin migrate: {e}")))?;
-    Ok(())
-}
-
 /// Insert built-in policies when the table has no rows.
-pub async fn seed_if_empty(pool: &AnyPool, backend: &str) -> AppResult<()> {
+pub async fn seed_if_empty(pool: &AnyPool, backend: SqlBackend) -> AppResult<()> {
     let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM casbin_rule")
         .fetch_one(pool)
         .await
@@ -95,38 +35,12 @@ pub async fn seed_if_empty(pool: &AnyPool, backend: &str) -> AppResult<()> {
 
 pub(crate) async fn insert_rule(
     pool: &AnyPool,
-    backend: &str,
+    backend: SqlBackend,
     ptype: &str,
     rule: &[&str],
 ) -> AppResult<()> {
     let cols = pad_rule_slice(rule);
-    let sql = match backend {
-        "sqlite" => {
-            r#"
-            INSERT OR IGNORE INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#
-        }
-        "postgres" => {
-            r#"
-            INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT DO NOTHING
-            "#
-        }
-        "mysql" => {
-            r#"
-            INSERT IGNORE INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#
-        }
-        other => {
-            return Err(AppError::Internal(format!(
-                "casbin insert not supported for '{other}'"
-            )));
-        }
-    };
-    sqlx::query(sql)
+    sqlx::query(backend.casbin_insert_sql())
         .bind(ptype)
         .bind(&cols[0])
         .bind(&cols[1])
@@ -178,9 +92,9 @@ mod tests {
     #[tokio::test]
     async fn seed_runs_once() {
         let pool = pool().await;
-        migrate(&pool, "sqlite").await.unwrap();
-        seed_if_empty(&pool, "sqlite").await.unwrap();
-        seed_if_empty(&pool, "sqlite").await.unwrap();
+        crate::entity::migrate(&pool, SqlBackend::Sqlite).await.unwrap();
+        seed_if_empty(&pool, SqlBackend::Sqlite).await.unwrap();
+        seed_if_empty(&pool, SqlBackend::Sqlite).await.unwrap();
         let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM casbin_rule")
             .fetch_one(&pool)
             .await

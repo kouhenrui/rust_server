@@ -10,7 +10,7 @@ use prost::Message;
 use serde_json::Value;
 use tower::ServiceExt;
 
-use thumbor::auth::upsert_user_for_backend;
+use thumbor::auth::{upsert_account_for_backend, SqlBackend};
 use thumbor::config::Config;
 use thumbor::proto::api::{ApiResponse, ImageRequest};
 use thumbor::response::{SUCCESS_CODE, SUCCESS_MESSAGE};
@@ -41,9 +41,9 @@ async fn app_with_root(root: PathBuf) -> axum::Router {
         ..Config::default()
     };
     let state = AppState::connect(cfg).await.unwrap();
-    upsert_user_for_backend(
+    upsert_account_for_backend(
         state.db.sql_pool().unwrap(),
-        state.db.backend_name(),
+        SqlBackend::Sqlite,
         "testuser",
         "testpass",
     )

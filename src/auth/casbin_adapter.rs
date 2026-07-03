@@ -1,34 +1,25 @@
-//! Casbin [`Adapter`] backed by the application's sqlx [`AnyPool`].
+//! Casbin [`Adapter`] backed by sqlx [`AnyPool`]（PostgreSQL / MySQL / SQLite）。
 
 use async_trait::async_trait;
 use casbin::{Adapter, Filter, Model, Result as CasbinResult};
 use sqlx::AnyPool;
 
 use super::casbin_db::{pad_rule_vec, trim_rule};
+use crate::entity::{CasbinRulePolicy, SqlBackend};
 use crate::error::{AppError, AppResult};
 
 #[derive(Clone)]
 pub struct SqlxAnyAdapter {
     pool: AnyPool,
-    backend: String,
+    backend: SqlBackend,
     is_filtered: bool,
 }
 
-type CasbinRuleRow = (
-    String,
-    String,
-    String,
-    String,
-    String,
-    String,
-    String,
-);
-
 impl SqlxAnyAdapter {
-    pub fn new(pool: AnyPool, backend: &str) -> Self {
+    pub fn new(pool: AnyPool, backend: SqlBackend) -> Self {
         Self {
             pool,
-            backend: backend.to_string(),
+            backend,
             is_filtered: false,
         }
     }
@@ -47,16 +38,15 @@ impl SqlxAnyAdapter {
 #[async_trait]
 impl Adapter for SqlxAnyAdapter {
     async fn load_policy(&mut self, m: &mut dyn Model) -> CasbinResult<()> {
-        let rows = sqlx::query_as::<_, CasbinRuleRow>(
-            "SELECT ptype, v0, v1, v2, v3, v4, v5 FROM casbin_rule ORDER BY id",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(Self::map_err)?;
+        let rows = sqlx::query_as::<_, CasbinRulePolicy>(CasbinRulePolicy::select_all_ordered())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
 
         for row in rows {
-            let (ptype, v0, v1, v2, v3, v4, v5) = row;
-            insert_model_rule(m, &ptype, trim_rule([v0, v1, v2, v3, v4, v5]))?;
+            let ptype = row.ptype.clone();
+            let rule = trim_rule(row.into_rule_values());
+            insert_model_rule(m, &ptype, rule)?;
         }
         Ok(())
     }
@@ -66,16 +56,14 @@ impl Adapter for SqlxAnyAdapter {
         m: &mut dyn Model,
         f: Filter<'a>,
     ) -> CasbinResult<()> {
-        let rows = sqlx::query_as::<_, CasbinRuleRow>(
-            "SELECT ptype, v0, v1, v2, v3, v4, v5 FROM casbin_rule ORDER BY id",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(Self::map_err)?;
+        let rows = sqlx::query_as::<_, CasbinRulePolicy>(CasbinRulePolicy::select_all_ordered())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
 
         for row in rows {
-            let (ptype, v0, v1, v2, v3, v4, v5) = row;
-            let rule = trim_rule([v0, v1, v2, v3, v4, v5]);
+            let ptype = row.ptype.clone();
+            let rule = trim_rule(row.into_rule_values());
             let sec = section_for_ptype(&ptype);
             let mut skip = false;
 
@@ -112,7 +100,7 @@ impl Adapter for SqlxAnyAdapter {
         if let Some(ast_map) = m.get_model().get("p") {
             for (ptype, ast) in ast_map {
                 for rule in ast.get_policy() {
-                    insert_rule_db(&self.pool, &self.backend, ptype, rule)
+                    insert_rule_db(&self.pool, self.backend, ptype, rule)
                         .await
                         .map_err(Self::map_app_err)?;
                 }
@@ -121,7 +109,7 @@ impl Adapter for SqlxAnyAdapter {
         if let Some(ast_map) = m.get_model().get("g") {
             for (ptype, ast) in ast_map {
                 for rule in ast.get_policy() {
-                    insert_rule_db(&self.pool, &self.backend, ptype, rule)
+                    insert_rule_db(&self.pool, self.backend, ptype, rule)
                         .await
                         .map_err(Self::map_app_err)?;
                 }
@@ -145,7 +133,7 @@ impl Adapter for SqlxAnyAdapter {
         ptype: &str,
         rule: Vec<String>,
     ) -> CasbinResult<bool> {
-        let inserted = insert_rule_db(&self.pool, &self.backend, ptype, &rule)
+        let inserted = insert_rule_db(&self.pool, self.backend, ptype, &rule)
             .await
             .map_err(Self::map_app_err)?;
         Ok(inserted)
@@ -262,38 +250,12 @@ fn insert_model_rule(m: &mut dyn Model, ptype: &str, rule: Vec<String>) -> Casbi
 
 async fn insert_rule_db(
     pool: &AnyPool,
-    backend: &str,
+    backend: SqlBackend,
     ptype: &str,
     rule: &[String],
 ) -> AppResult<bool> {
     let cols = pad_rule_vec(rule);
-    let sql = match backend {
-        "sqlite" => {
-            r#"
-            INSERT OR IGNORE INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#
-        }
-        "postgres" => {
-            r#"
-            INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT DO NOTHING
-            "#
-        }
-        "mysql" => {
-            r#"
-            INSERT IGNORE INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#
-        }
-        other => {
-            return Err(AppError::Internal(format!(
-                "casbin insert not supported for '{other}'"
-            )));
-        }
-    };
-    let result = sqlx::query(sql)
+    let result = sqlx::query(backend.casbin_insert_sql())
         .bind(ptype)
         .bind(&cols[0])
         .bind(&cols[1])

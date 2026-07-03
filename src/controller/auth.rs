@@ -1,7 +1,8 @@
 //! Authentication controllers: login and protected profile.
 
 use crate::auth::authenticate;
-use crate::auth::user::upsert_user_for_backend;
+use crate::auth::upsert_account_for_backend;
+use crate::auth::SqlBackend;
 use crate::error::{AppError, AppResult};
 use crate::middleware::AuthClaims;
 use crate::state::AppState;
@@ -86,11 +87,8 @@ pub async fn bootstrap_admin(state: &AppState) -> AppResult<()> {
             "THUMBOR_BOOTSTRAP_PASSWORD must not be empty".into(),
         ));
     }
-    let pool = state
-        .db
-        .sql_pool()
-        .ok_or_else(|| AppError::Internal("bootstrap requires SQL database".into()))?;
-    upsert_user_for_backend(pool, state.db.backend_name(), &username, &password).await?;
+    let (backend, pool) = SqlBackend::require_from_db(&state.db)?;
+    upsert_account_for_backend(pool, backend, &username, &password).await?;
     state.casbin.add_role_for_user(&username, "admin").await?;
     crate::info!(username = %username, "bootstrap user ensured");
     Ok(())

@@ -2,6 +2,7 @@
 //! internally `Arc`-backed, font is loaded once into a `FontRef`).
 
 use crate::auth::{CasbinAuth, JwtAuth};
+use crate::entity::{self, SqlBackend};
 use crate::cache::{Cache, CacheBackendConfig};
 use crate::config::Config;
 use crate::db::{Db, DbBackendConfig};
@@ -72,18 +73,9 @@ impl AppState {
         let http = HttpClient::build(config.fetch_timeout)?;
         let img_cache_ttl_secs = config.img_cache_ttl_secs;
 
-        if let Some(pool) = db.sql_pool() {
-            crate::auth::migrate(pool, db.backend_name()).await?;
-        }
-
-        let casbin = match db.sql_pool() {
-            Some(pool) => CasbinAuth::new(&config, pool, db.backend_name()).await?,
-            None => {
-                return Err(AppError::Internal(
-                    "casbin policy storage requires a SQL database backend".into(),
-                ));
-            }
-        };
+        let (sql_backend, sql_pool) = SqlBackend::require_from_db(&db)?;
+        entity::migrate(sql_pool, sql_backend).await?;
+        let casbin = CasbinAuth::new(&config, sql_pool, sql_backend).await?;
 
         let state = Self {
             config: config.clone(),
