@@ -22,17 +22,25 @@ image transformation. Both HTTP handlers MUST call it after parameter parsing.
 
 `process_image` MUST execute steps in this order:
 
+0. Optional `cache.get` when cache is enabled (key = `ImgParams::cache_key()`)
 1. `source::load_source` — obtain raw bytes
 2. `source::decode` — decode to `DynamicImage`
 3. `proc::transform::apply` — optional crop, then resize/fit
 4. `FilterChain::apply` — filters in declaration order
 5. `proc::watermark::apply` — optional text or image overlay
 6. `encode` — PNG / JPEG / WebP output
+7. Optional `cache.set` on success when cache is enabled
+
+#### Scenario: cache hit skips pipeline
+
+- GIVEN cache enabled and a prior successful `/img` for the same params
+- WHEN an identical request is made
+- THEN `load_source` is not called and cached bytes are returned
 
 #### Scenario: crop before resize
 
 - GIVEN both `crop` and `w`/`h` are set
-- WHEN the pipeline runs
+- WHEN the pipeline runs on cache miss
 - THEN cropping happens before resizing
 
 ### Requirement: Output encoding

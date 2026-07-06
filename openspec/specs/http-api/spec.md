@@ -23,6 +23,30 @@ JSON success envelope. The `data` field MUST contain `status`, `cache`, and
 - AND `data.database` contains `{ "backend": "<name>", "ok": true|false }`
 - AND `trace_id` is non-empty
 
+### Requirement: Login endpoint
+
+The service MUST expose `POST /login` accepting JSON
+`{ "username", "password" }`. Success MUST return HTTP 200 with
+`data.token` (JWT) and `data.expires_at` (Unix timestamp).
+
+#### Scenario: invalid credentials
+
+- GIVEN wrong username or password
+- WHEN `POST /login` is called
+- THEN the response is HTTP 401 and `err.kind` is `unauthorized`
+
+### Requirement: Profile endpoint
+
+The service MUST expose `GET /me` requiring `Authorization: Bearer <token>`
+and Casbin authorization for role `user` (or higher). Success MUST return
+`data.username` from JWT `sub`.
+
+#### Scenario: missing token
+
+- GIVEN no `Authorization` header
+- WHEN `GET /me` is called
+- THEN the response is HTTP 401
+
 ### Requirement: Image processing endpoint (GET)
 
 The service MUST expose `GET /img` that accepts transform parameters as query
@@ -73,16 +97,28 @@ protobuf envelope with the same semantic fields as the JSON envelope.
 ### Requirement: Route registration
 
 HTTP routes MUST be registered in `src/router.rs`. Handlers MUST live under
-`src/controller/`. Access logging middleware MUST wrap all routes.
-
-### Requirement: Processing pipeline
-
-Image handlers MUST delegate transformation to `controller::img::process_image`
-after parsing parameters (see `image-pipeline` and `params` specs).
+`src/controller/`. Middleware layers (outer to inner): `logging_middleware`,
+then `authorize_middleware` (JWT + Casbin).
 
 #### Scenario: router wiring
 
 - GIVEN the application starts
 - WHEN `router::router(state)` is built
-- THEN `/health`, `GET /img`, and `POST /img` are registered and the logging
-  middleware is applied as an outer layer
+- THEN `/health`, `/login`, `/me`, `GET /img`, and `POST /img` are registered
+
+### Requirement: Authorization middleware
+
+`authorize_middleware` MUST resolve the Casbin subject as JWT `sub` when a
+valid Bearer token is present, otherwise `anonymous`. Denied requests MUST
+return HTTP 403 with `err.kind` = `forbidden`.
+
+#### Scenario: public img without token
+
+- GIVEN no Authorization header
+- WHEN `GET /img` is called with valid parameters
+- THEN Casbin allows the request (role `anonymous`)
+
+### Requirement: Processing pipeline
+
+Image handlers MUST delegate transformation to `controller::img::process_image`
+after parsing parameters (see `image-pipeline` and `params` specs).

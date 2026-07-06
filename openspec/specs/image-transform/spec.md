@@ -67,11 +67,19 @@ When `fit` is omitted, the service MUST behave as if `fit=cover` was given.
 - THEN the output is 200x200 with cover behavior (crop-to-fill)
 
 ### Requirement: Missing dimensions
-The service MUST accept requests that specify only `w` or only `h`; in that
-case the unspecified dimension is computed to preserve the source aspect ratio.
 
-#### Scenario: only width given
-- GIVEN `w=200` and no `h`
-- WHEN the handler runs the transform
-- THEN the output width is 200 and the height is computed to preserve the
-  source aspect ratio
+When resizing, both target width and height MUST be greater than zero.
+`ImgParams::build` MAY accept a single query dimension as `(w, 0)` or `(0, h)`
+placeholder, but `transform::apply` rejects zero dimensions with
+`AppError::BadRequest`. Clients SHOULD pass both `w` and `h` for resize.
+
+#### Scenario: both dimensions required at resize
+
+- GIVEN `target` is `Some((200, 0))`
+- WHEN `transform::apply` runs
+- THEN the error is `AppError::BadRequest`
+
+### Requirement: Unit test coverage
+
+`proc/transform.rs` MUST include tests for cover, contain, stretch output
+dimensions, crop-before-resize ordering, and zero-dimension rejection.

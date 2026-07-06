@@ -57,6 +57,11 @@ The service MUST read at least these variables:
 | `THUMBOR_DOTENV_PATH` | `.env` | path to dotenv file loaded at startup |
 | `THUMBOR_JWT_SECRET` | `secret` | HMAC secret for JWT (override in prod) |
 | `THUMBOR_JWT_EXPIRE_SECS` | `86400` | JWT lifetime in seconds |
+| `THUMBOR_BOOTSTRAP_USERNAME` | _unset_ | optional admin user to upsert at startup |
+| `THUMBOR_BOOTSTRAP_PASSWORD` | _unset_ | password for bootstrap user (required with username) |
+| `THUMBOR_CORS_ORIGINS` | _unset_ | comma-separated allowed origins; unset = permissive |
+| `THUMBOR_IMG_CACHE_TTL_SECS` | _unset_ | `/img` cache TTL seconds; unset = no expiry |
+| `THUMBOR_CASBIN_MODEL` | `config/casbin_model.conf` | Casbin RBAC model file path |
 
 #### Scenario: defaults match the documentation
 

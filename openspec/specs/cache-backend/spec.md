@@ -2,7 +2,8 @@
 
 ## Purpose
 
-Define the pluggable cache layer used at application startup.
+Define the pluggable cache layer used at application startup and for `/img`
+result caching.
 
 ## Requirements
 
@@ -59,11 +60,23 @@ All backends MUST implement `cache::Cache` with `get`, `set`, `delete`, and
 `ping`. The cache is connected during `AppState::connect` and held on
 `AppState`.
 
-**Note:** As of current code, the `/img` pipeline does not yet read or write
-the cache; see `changes/cache-backend/tasks.md` §6.
-
 #### Scenario: disabled ping succeeds
 
 - GIVEN the disabled backend
 - WHEN `ping` is called
 - THEN it returns `Ok(())` without network I/O
+
+### Requirement: Image result caching
+
+When cache is enabled, `controller/img.rs::process_image` MUST:
+
+1. Compute key via `ImgParams::cache_key()`
+2. On hit: return cached bytes without re-running the pipeline
+3. On miss: run pipeline, then `cache.set` with packed `(content_type\0bytes)`
+4. Use TTL from `Config.img_cache_ttl_secs` (`THUMBOR_IMG_CACHE_TTL_SECS`)
+
+#### Scenario: cache survives source removal
+
+- GIVEN memory cache enabled and a successful `/img` response
+- WHEN the local source file is deleted and the same request is retried
+- THEN the second response is still HTTP 200 (served from cache)

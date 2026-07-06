@@ -1,24 +1,10 @@
-# Authentication (delta)
+# Authentication (change delta)
 
-## ADDED Requirements (phase 1)
+Phase 1 (password + JWT library) and phase 2 (login API, Casbin, SQL persistence)
+are **merged** into the canonical spec:
 
-See canonical spec at `openspec/specs/auth/spec.md`.
+→ [`openspec/specs/auth/spec.md`](../../../specs/auth/spec.md)
 
-## ADDED Requirements (phase 2 — planned)
+Task checklist: [`openspec/changes/auth/tasks.md`](../../tasks.md)
 
-### Requirement: Login endpoint
-
-The service MUST expose `POST /login` accepting JSON credentials and returning
-a JWT in the unified success envelope on success.
-
-#### Scenario: valid login
-
-- GIVEN a registered user with a bcrypt password hash in the database
-- WHEN `POST /login` with correct username and password
-- THEN HTTP 200, `data.token` is a verifiable JWT
-
-#### Scenario: invalid credentials
-
-- GIVEN wrong password
-- WHEN `POST /login`
-- THEN HTTP 401 and `err.kind` is `unauthorized`
+Remaining backlog: `POST /register` (see `openspec/ROADMAP.md`).

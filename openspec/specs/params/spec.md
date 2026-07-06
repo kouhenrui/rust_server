@@ -7,6 +7,21 @@ into the shared [`ImgParams`] type used by the processing pipeline.
 
 ## Requirements
 
+### Requirement: Shared validation via build
+
+`params::ImgParams::build` MUST centralize validation for both GET and POST
+paths: non-empty `src`, reject `w=0` or `h=0`, filter zero-sized crop rects.
+
+`ImgParams::parse` MUST convert query strings then call `build`.
+`controller/img.rs::img_request_to_params` MUST map proto fields then call
+`build`.
+
+#### Scenario: query and build agree
+
+- GIVEN equivalent query params and explicit `build` arguments
+- WHEN both produce `ImgParams`
+- THEN `src`, `target`, `fit`, and `format` match
+
 ### Requirement: Query parameter parsing
 
 `params::ImgParams::parse` MUST convert `ImgParamsRaw` (axum `Query`) into
@@ -55,14 +70,18 @@ Supported query keys: `src`, `w`, `h`, `fit`, `crop`, `filters`, `watermark`,
 ### Requirement: Protobuf conversion
 
 `controller/img.rs` MUST map `api::ImageRequest` to `ImgParams` via
-`img_request_to_params`, keeping the same validation semantics as the query
-path. GET and POST MUST share one internal `ImgParams` type.
+`img_request_to_params`, delegating validation to `ImgParams::build`.
 
 #### Scenario: shared pipeline
 
 - GIVEN equivalent GET query params and POST `ImageRequest` fields
 - WHEN both reach `process_image`
 - THEN the same transform/filter/watermark/encode steps run
+
+### Requirement: Cache key
+
+`ImgParams::cache_key` MUST produce a stable string from normalized transform
+parameters for `/img` result caching (see `cache-backend` spec).
 
 ### Requirement: Filter chain delegation
 

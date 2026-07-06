@@ -17,17 +17,18 @@
 
 ## 2. HTTP routing
 
-- [x] 2.1 Build a `Router` in `src/router.rs` with `/health`, `GET /img`,
-  and `POST /img`. (`src/router.rs`)
+- [x] 2.1 Build a `Router` in `src/router.rs` with `/health`, `/login`,
+  `/me`, `GET /img`, and `POST /img`. (`src/router.rs`)
 - [x] 2.2 Implement `health` in `src/controller/health.rs` with
   `check_health` (cache/db ping) via `ok!`.
-- [x] 2.3 Implement `img_get` and `img_post` in `src/controller/img.rs`.
+- [x] 2.3 Implement `login` and `me` in `src/controller/auth.rs`.
+- [x] 2.4 Implement `img_get` and `img_post` in `src/controller/img.rs`.
 - [x] 2.4 JSON success responses use `Content-Type: application/json` with
   base64-encoded `data.image`.
 - [x] 2.5 `process_image` orchestrates load → transform → filter → watermark →
   encode (see `changes/image-pipeline/tasks.md`).
-- [x] 2.6 `router` wraps state in `Arc<AppState>` and applies logging middleware
-  as outer layer.
+- [x] 2.6 `router` wraps state in `Arc<AppState>` and applies
+  `authorize_middleware` + `logging_middleware`.
 
 ## 3. Wire it up
 
@@ -35,8 +36,8 @@
   `axum::serve`, `CorsLayer::permissive()`, and graceful shutdown.
 - [x] 3.2 `src/lib.rs` exposes `router`, `controller`, `response`, `middleware`,
   `params`, `auth`, `error`, `http_client`, `util`.
-- [x] 3.3 Integration tests in `tests/integration.rs` cover health, GET/POST
-  `/img`, and error envelopes.
+- [x] 3.3 Integration tests in `tests/integration.rs` + `tests/common/` cover
+  health, login, `/me`, GET/POST `/img`, cache, and error envelopes.
 
 ## 4. Verification
 

@@ -29,6 +29,7 @@
 
 - [x] 5.1 Add `Unauthorized`, `InvalidToken` to `AppError` → 401.
   (`src/error.rs`)
+- [x] 5.2 Add `Forbidden` → 403 for Casbin denial.
 
 ## 6. Login HTTP API (phase 2)
 
@@ -38,24 +39,35 @@
 - [x] 6.4 Failure: wrong credentials → 401 `unauthorized`.
 - [x] 6.5 Integration test in `tests/integration.rs`.
 
-## 7. JWT middleware (phase 2)
+## 7. JWT + Casbin middleware (phase 2)
 
 - [x] 7.1 Add `src/middleware/auth.rs` — validate `Bearer` via `state.jwt`.
-- [x] 7.2 Inject verified `Claims` into request extensions.
-- [x] 7.3 Protect `GET /me` (public: `/health`, `/login`, `/img`).
+- [x] 7.2 Inject verified `Claims` via `AuthClaims` extractor.
+- [x] 7.3 Casbin `authorize_middleware` on all routes.
+- [x] 7.4 Protect `GET /me`; public: `/health`, `/login`, `/img`.
 
-## 8. User persistence (phase 2)
+## 8. Account persistence (phase 2)
 
-- [x] 8.1 Define users table migration in `src/auth/user.rs` (sql backends).
-- [ ] 8.2 Store bcrypt hash on registration (future `POST /register`).
-- [x] 8.3 Login looks up user and calls `verify_password`.
+- [x] 8.1 Entity DDL + migrate: `accounts` table (`src/entity/schema.rs`).
+- [x] 8.2 `AccountRepository` in `src/entity/repositories/account.rs`.
+- [x] 8.3 Login business in `src/auth/account.rs` (`authenticate`).
+- [ ] 8.4 Store bcrypt hash on registration (future `POST /register`).
 
-## 9. Production hardening (phase 2)
+## 9. Casbin SQL backend (phase 2)
 
-- [x] 9.1 Startup `warn!` when `jwt_secret` is still default `secret`.
-- [x] 9.2 Login scenarios in `openspec/specs/auth/spec.md`.
+- [x] 9.1 `casbin_rule` table + `CasbinRuleRepository`.
+- [x] 9.2 `SqlxAnyAdapter` + `CasbinAuth` wrapper.
+- [x] 9.3 Default policy seed in `auth/casbin_db.rs`.
+- [x] 9.4 Unit tests: anonymous vs user role enforcement.
 
-## 10. Verification
+## 10. Production hardening (phase 2)
 
-- [x] 10.1 `cargo test` passes auth unit tests (phase 1).
-- [x] 10.2 Integration tests cover login + protected route (phase 2).
+- [x] 10.1 Startup `warn!` when `jwt_secret` is still default `secret`.
+- [x] 10.2 Optional bootstrap admin via `THUMBOR_BOOTSTRAP_*`.
+- [x] 10.3 Login scenarios in `openspec/specs/auth/spec.md`.
+
+## 11. Verification
+
+- [x] 11.1 `cargo test` passes auth + entity + casbin unit tests.
+- [x] 11.2 Integration tests cover login + `/me` + Casbin paths.
+- [x] 11.3 CI runs clippy and fmt.

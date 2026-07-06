@@ -2,7 +2,8 @@
 
 ## Purpose
 
-Define the pluggable database connection layer required at application startup.
+Define the pluggable database connection layer required at application startup,
+and its relationship to the `entity/` module for auth and Casbin tables.
 
 ## Requirements
 
@@ -47,14 +48,24 @@ Invalid `THUMBOR_DB_PORT` MUST warn and keep the previous value.
 ### Requirement: DbProvider abstraction
 
 All backends MUST implement `db::DbProvider` with `ping`. SQL backends expose
-`sql_pool()`; MongoDB exposes `mongo_client()`. The module establishes
-connections only — no ORM or query layer is defined here.
+`sql_pool()`; MongoDB exposes `mongo_client()`. The `db/` module establishes
+connections only — entity queries live in `entity/repositories/`.
 
 #### Scenario: integration tests use sqlite memory
 
-- GIVEN tests set `THUMBOR_DB_BACKEND=sqlite` and `THUMBOR_DB_URL=sqlite::memory:`
+- GIVEN tests call `tests/common::connect_state` with unique in-memory DB names
 - WHEN `AppState::connect` runs in tests
-- THEN startup succeeds without creating a file on disk
+- THEN startup succeeds without file collisions under parallel test execution
+
+### Requirement: Entity migration at startup
+
+For SQL backends, `AppState::connect` MUST call `entity::migrate` to ensure
+`accounts` and `casbin_rule` tables exist before Casbin and login run.
+
+MongoDB connections MUST NOT run entity migration; auth features require a
+relational backend.
+
+See `entity` spec for table definitions and repository contracts.
 
 ### Requirement: Startup is mandatory
 

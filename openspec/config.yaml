@@ -9,16 +9,20 @@ context: |
   (crop, resize, filters, watermark, output-format encoding).
   API style: unified `ApiResponse` envelope for JSON and Protobuf; GET uses
   query parameters, POST uses `application/x-protobuf`.
-  Architecture: `router.rs` + `controller/`, `params.rs` for `/img` parameters,
-  `response.rs` envelopes, `middleware/` for trace_id and access logs,
+  Auth: POST /login, GET /me, JWT + Casbin RBAC; policies in SQL `casbin_rule`.
+  Architecture: `router.rs` + `controller/` (health, auth, img),
+  `params.rs` (`ImgParams::parse` / `build` / `cache_key`),
+  `response.rs` envelopes, `middleware/` (logging + authorize),
   `logger/` for tracing init/macros, `error.rs` for `AppError` + stable codes,
-  `auth/` for bcrypt + JWT (library; login API planned),
+  `auth/` for bcrypt, JWT, Casbin, `authenticate` service,
+  `entity/` for models, repositories, schema, migrate (`accounts`, `casbin_rule`),
   `util/` + `http_client/` for shared helpers,
   `state.rs` for `AppState`, `FontCache`, `check_health`,
   pluggable `cache/` (disabled | memory | redis) and `db/` (postgres | mysql |
   sqlite | mongodb).
+  Tests: 45 lib unit + 11 integration; CI runs fmt, clippy -D warnings, test.
   Work plan: see `openspec/ROADMAP.md` (full module ↔ spec mapping table).
-  Non-goals: image storage as a product feature, signed URLs, multi-tenant RBAC.
+  Non-goals: signed URLs, multi-tenant RBAC beyond Casbin roles.
 
 rules:
   proposal:
