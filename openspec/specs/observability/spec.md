@@ -71,12 +71,30 @@ All routes MUST pass through `middleware::logging_middleware`, which:
 
 The access middleware MUST NOT log response bodies.
 
+#### Scenario: completion log omits body
+
+- GIVEN a successful `GET /img` response with a large base64 payload
+- WHEN the access middleware emits `http request completed`
+- THEN the log line does not include response body content
+
 ### Requirement: Supplemental macros
 
 The service MUST provide crate-root `span!`, `ok!`, and `err!` macros for
 spans and API responses (see `shared-infra` spec).
 
+#### Scenario: ok macro builds envelope
+
+- GIVEN handler code calls `ok!(data, trace_id)`
+- WHEN the macro expands
+- THEN it delegates to `response::api_success`
+
 ### Requirement: TraceId extractor
 
 `middleware::TraceId` MUST implement axum `FromRequestParts` so handlers can
 read the trace id injected by the logging middleware.
+
+#### Scenario: handler reads trace id
+
+- GIVEN a request passes through `logging_middleware`
+- WHEN a handler extracts `TraceId` from request parts
+- THEN the value matches `X-Trace-Id` on the response

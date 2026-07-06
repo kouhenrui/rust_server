@@ -161,10 +161,12 @@ Denied requests MUST return HTTP 403 with `err.kind` = `forbidden`.
 - WHEN `GET /me` is called with a valid token for `testuser`
 - THEN Casbin allows the request
 
-### Requirement: Bootstrap admin (optional)
+### Requirement: Bootstrap admin
 
-When `THUMBOR_BOOTSTRAP_USERNAME` and `THUMBOR_BOOTSTRAP_PASSWORD` are set,
-startup MUST upsert the account and assign Casbin role `admin` (idempotent).
+The service MUST, when `THUMBOR_BOOTSTRAP_USERNAME` and
+`THUMBOR_BOOTSTRAP_PASSWORD` are both non-empty, upsert the account and assign
+Casbin role `admin` (idempotent). When either variable is unset, bootstrap MUST
+be skipped.
 
 #### Scenario: bootstrap on startup
 

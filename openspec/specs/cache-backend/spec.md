@@ -42,6 +42,12 @@ When `memory` is selected, the service MUST read:
 
 Invalid values MUST warn and keep the default.
 
+#### Scenario: memory defaults
+
+- GIVEN `THUMBOR_CACHE_BACKEND=memory` and no memory-specific overrides
+- WHEN `CacheBackendConfig::from_env()` runs
+- THEN max entries default to 1024 and TTL defaults to 3600 seconds
+
 ### Requirement: Redis cache configuration
 
 When `redis` is selected, the service MUST support either `THUMBOR_REDIS_URL`

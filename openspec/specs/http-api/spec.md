@@ -122,3 +122,9 @@ return HTTP 403 with `err.kind` = `forbidden`.
 
 Image handlers MUST delegate transformation to `controller::img::process_image`
 after parsing parameters (see `image-pipeline` and `params` specs).
+
+#### Scenario: shared process_image entry
+
+- GIVEN valid `ImgParams` from GET or POST
+- WHEN the image handler runs
+- THEN `process_image` executes load → decode → transform → filters → watermark → encode

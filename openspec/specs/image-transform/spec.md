@@ -83,3 +83,9 @@ placeholder, but `transform::apply` rejects zero dimensions with
 
 `proc/transform.rs` MUST include tests for cover, contain, stretch output
 dimensions, crop-before-resize ordering, and zero-dimension rejection.
+
+#### Scenario: transform tests pass
+
+- GIVEN the unit test suite in `proc/transform.rs`
+- WHEN `cargo test --lib proc::transform` runs
+- THEN all fit-mode and dimension tests pass

@@ -60,6 +60,12 @@ matching `content_type` MIME string.
 Source format detection MUST use `AppState::sniff_format` (`image::guess_format`)
 on raw bytes, not URL extensions or `Content-Type` headers.
 
+#### Scenario: sniff from bytes
+
+- GIVEN raw PNG bytes loaded from a path without a `.png` extension
+- WHEN `sniff_format` runs on the bytes
+- THEN the detected format is PNG
+
 ### Requirement: Lazy font cache
 
 `AppState.fonts` (`FontCache`) MUST lazily load the watermark TTF on first use

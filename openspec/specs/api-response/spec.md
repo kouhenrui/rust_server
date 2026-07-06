@@ -75,7 +75,19 @@ Envelope rendering MUST be centralized in `src/response.rs`. Controllers MUST
 return `Response` via `api_success`, `api_error`, `ImageOutcome`, or the
 protobuf equivalents — not ad-hoc JSON in handlers.
 
+#### Scenario: handlers use response helpers
+
+- GIVEN any controller handler returns a JSON or protobuf body
+- WHEN the response is built
+- THEN it goes through `response.rs` helpers rather than manual `Json` structs
+
 ### Requirement: Health payload
 
 `HealthData` MUST include `status`, `cache`, and `database` fields where each
 dependency reports `backend` name and `ok` ping result.
+
+#### Scenario: health dependency fields
+
+- GIVEN a successful `GET /health` response
+- WHEN the client reads `data.cache` and `data.database`
+- THEN each object contains `backend` (string) and `ok` (boolean)

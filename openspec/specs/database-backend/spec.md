@@ -45,6 +45,12 @@ The service MUST support `THUMBOR_DB_URL` or discrete fields:
 
 Invalid `THUMBOR_DB_PORT` MUST warn and keep the previous value.
 
+#### Scenario: discrete fields build url
+
+- GIVEN `THUMBOR_DB_BACKEND=sqlite` and `THUMBOR_DB_PATH=test.db`
+- WHEN `DbBackendConfig::from_env()` runs
+- THEN a SQLite connection URL is constructed from the path
+
 ### Requirement: DbProvider abstraction
 
 All backends MUST implement `db::DbProvider` with `ping`. SQL backends expose
@@ -67,7 +73,19 @@ relational backend.
 
 See `entity` spec for table definitions and repository contracts.
 
+#### Scenario: tables exist after connect
+
+- GIVEN a fresh SQLite database
+- WHEN `AppState::connect` completes
+- THEN `accounts` and `casbin_rule` tables exist
+
 ### Requirement: Startup is mandatory
 
 `AppState::connect` MUST connect the database; connection failure MUST prevent
 the server from starting with an `AppError`.
+
+#### Scenario: connect failure aborts startup
+
+- GIVEN an unreachable database URL
+- WHEN `AppState::connect` is called
+- THEN the error propagates and the server does not start

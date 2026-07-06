@@ -31,6 +31,11 @@ fn make_test_root() -> PathBuf {
         Rgba([x as u8 * 100, y as u8 * 100, 200, 255])
     });
     img.save(root.join("tiny.png")).unwrap();
+    // 1×1 red pixel overlay for image watermark tests
+    let wm = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_fn(1, 1, |_, _| {
+        Rgba([255, 0, 0, 255])
+    });
+    wm.save(root.join("wm.png")).unwrap();
     root
 }
 
@@ -371,6 +376,46 @@ async fn me_returns_profile_with_valid_token() {
     let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
     let json: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(json["data"]["username"], "testuser");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn get_img_with_image_watermark_returns_success() {
+    let root = make_test_root();
+    let app = app_with_root(root.clone()).await;
+
+    let qs = "src=tiny.png&w=8&h=8&watermark=image:wm.png@0,0&format=png";
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/img?{qs}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), 8 * 1024 * 1024)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["code"], SUCCESS_CODE);
+    assert_eq!(json["data"]["content_type"], "image/png");
+
+    let image_b64 = json["data"]["image"].as_str().unwrap();
+    let raw = base64::engine::general_purpose::STANDARD
+        .decode(image_b64)
+        .unwrap();
+    let decoded = image::load_from_memory(&raw).unwrap();
+    assert_eq!(decoded.width(), 8);
+    assert_eq!(decoded.height(), 8);
+    // Top-left pixel should pick up red from wm.png overlay
+    let rgba = decoded.to_rgba8();
+    let pixel = rgba.get_pixel(0, 0);
+    assert!(pixel[0] > 200, "expected red channel from watermark, got {:?}", pixel);
 
     let _ = std::fs::remove_dir_all(&root);
 }

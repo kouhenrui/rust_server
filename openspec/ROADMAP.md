@@ -97,7 +97,7 @@
 ## 推荐执行顺序（未完成项）
 
 1. `POST /register`（可选）
-2. 水印 E2E 测试
+2. ~~水印 E2E 测试~~ ✅（image watermark 集成测试）
 3. 单维度 `w`/`h` 缩放语义（spec 与实现需对齐，见 `image-transform`）
 
 ## 代码目录速查（当前）

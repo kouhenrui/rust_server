@@ -83,7 +83,19 @@ Supported query keys: `src`, `w`, `h`, `fit`, `crop`, `filters`, `watermark`,
 `ImgParams::cache_key` MUST produce a stable string from normalized transform
 parameters for `/img` result caching (see `cache-backend` spec).
 
+#### Scenario: identical params same key
+
+- GIVEN two `ImgParams` with the same `src`, dimensions, fit, crop, filters, watermark, and format
+- WHEN `cache_key` is called on each
+- THEN both keys are equal
+
 ### Requirement: Filter chain delegation
 
 The `filters` query value MUST be parsed by `FilterChain::parse` in
 `proc/filter.rs` (see `image-filters` spec).
+
+#### Scenario: filters parsed into chain
+
+- GIVEN query `filters=grayscale:blur(2.0)`
+- WHEN `ImgParams::parse` succeeds
+- THEN `params.filters` contains two filters in declaration order

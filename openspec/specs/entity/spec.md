@@ -62,6 +62,12 @@ SQL access for accounts MUST go through `entity::AccountRepository`:
 
 Dialect-specific upsert SQL MUST live on `SqlBackend::accounts_upsert_sql()`.
 
+#### Scenario: upsert via repository
+
+- GIVEN a migrated SQLite pool and a bcrypt password hash
+- WHEN `AccountRepository::upsert` is called with username `alice`
+- THEN `find_auth_by_username("alice")` returns the stored hash and active status
+
 ### Requirement: casbin_rule table
 
 Casbin policies MUST persist in `casbin_rule` with columns `ptype`, `v0`–`v5`
@@ -79,9 +85,21 @@ from CSV at runtime.
 SQL access for Casbin MUST go through `entity::CasbinRuleRepository` (used by
 `auth/casbin_adapter.rs` and `auth/casbin_db.rs`).
 
+#### Scenario: list policies ordered
+
+- GIVEN seeded Casbin policies in `casbin_rule`
+- WHEN `CasbinRuleRepository::list_all_ordered` runs
+- THEN rows are returned sorted by `id`
+
 ### Requirement: Test utilities
 
-Lib unit tests SHOULD use `entity::test_util::migrated_pool(name)` for a
-migrated in-memory SQLite pool. Integration tests SHOULD use
+Lib unit tests MUST use `entity::test_util::migrated_pool(name)` for a
+migrated in-memory SQLite pool. Integration tests MUST use
 `tests/common/mod.rs` with per-run unique database names to avoid parallel
 test collisions.
+
+#### Scenario: parallel integration tests
+
+- GIVEN two integration tests run concurrently
+- WHEN each calls `tests/common::connect_state`
+- THEN each uses a distinct in-memory SQLite database name
