@@ -17,6 +17,10 @@ use thumbor::config::Config;
 use thumbor::proto::api::{ApiResponse, ImageRequest};
 use thumbor::response::{SUCCESS_CODE, SUCCESS_MESSAGE};
 
+fn api_prefix() -> String {
+    Config::default().api_prefix
+}
+
 fn make_test_root() -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "thumbor-it-{}-{}",
@@ -48,7 +52,7 @@ async fn health_returns_unified_envelope() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/health")
+                .uri(format!("{}/health", api_prefix()))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -91,7 +95,7 @@ async fn post_img_protobuf_success() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/img")
+                .uri(format!("{}/img", api_prefix()))
                 .header("content-type", "application/x-protobuf")
                 .body(Body::from(body))
                 .unwrap(),
@@ -140,7 +144,7 @@ async fn post_img_protobuf_error_propagates_in_body() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/img")
+                .uri(format!("{}/img", api_prefix()))
                 .header("content-type", "application/x-protobuf")
                 .body(Body::from(body))
                 .unwrap(),
@@ -169,7 +173,7 @@ async fn post_img_protobuf_invalid_body_returns_bad_request() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/img")
+                .uri(format!("{}/img", api_prefix()))
                 .header("content-type", "application/x-protobuf")
                 .body(Body::from("not a protobuf".as_bytes().to_vec()))
                 .unwrap(),
@@ -197,7 +201,7 @@ async fn get_img_returns_unified_json_envelope() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/img?{qs}"))
+                .uri(format!("{}/img?{qs}", api_prefix()))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -243,7 +247,7 @@ async fn get_img_error_returns_unified_json_envelope() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/img?w=4&h=4")
+                .uri(format!("{}/img?w=4&h=4", api_prefix()))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -271,7 +275,7 @@ async fn login_returns_token() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/login")
+                .uri(format!("{}/login", api_prefix()))
                 .header("content-type", "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),
@@ -301,7 +305,7 @@ async fn login_wrong_password_returns_unauthorized() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/login")
+                .uri(format!("{}/login", api_prefix()))
                 .header("content-type", "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),
@@ -326,7 +330,7 @@ async fn me_requires_bearer_token() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/me")
+                .uri(format!("{}/me", api_prefix()))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -349,7 +353,7 @@ async fn me_returns_profile_with_valid_token() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/login")
+                .uri(format!("{}/login", api_prefix()))
                 .header("content-type", "application/json")
                 .body(Body::from(login_body.to_string()))
                 .unwrap(),
@@ -364,7 +368,7 @@ async fn me_returns_profile_with_valid_token() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/me")
+                .uri(format!("{}/me", api_prefix()))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -390,7 +394,7 @@ async fn get_img_with_image_watermark_returns_success() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/img?{qs}"))
+                .uri(format!("{}/img?{qs}", api_prefix()))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -433,7 +437,7 @@ async fn img_result_is_cached_with_memory_backend() {
     let app = thumbor::router::router(state);
 
     let qs = "src=tiny.png&w=4&h=4";
-    let uri = format!("/img?{qs}");
+    let uri = format!("{}/img?{qs}", api_prefix());
 
     let first = app
         .clone()

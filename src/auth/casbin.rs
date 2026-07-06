@@ -26,7 +26,7 @@ pub struct CasbinAuth {
 impl CasbinAuth {
     /// Load model from file and policies from the `casbin_rule` SQL table.
     pub async fn new(config: &Config, pool: &AnyPool, backend: SqlBackend) -> AppResult<Self> {
-        seed_if_empty(pool, backend).await?;
+        seed_if_empty(pool, backend, &config.api_prefix).await?;
 
         let model = load_model(&config.casbin_model).await?;
         let adapter = SqlxAnyAdapter::new(pool.clone(), backend);
@@ -74,30 +74,45 @@ mod tests {
     use super::*;
     use crate::config::Config;
 
-    async fn auth() -> CasbinAuth {
+    async fn auth() -> (CasbinAuth, String) {
         let pool = crate::entity::test_util::migrated_pool("memdb_casbin").await;
-        CasbinAuth::new(&Config::default(), &pool, SqlBackend::Sqlite)
+        let config = Config::default();
+        let api_prefix = config.api_prefix.clone();
+        let auth = CasbinAuth::new(&config, &pool, SqlBackend::Sqlite)
             .await
-            .unwrap()
+            .unwrap();
+        (auth, api_prefix)
     }
 
     #[tokio::test]
     async fn anonymous_can_health_but_not_me() {
-        let auth = auth().await;
-        assert!(auth.enforce("anonymous", "/health", "GET").await.unwrap());
-        assert!(!auth.enforce("anonymous", "/me", "GET").await.unwrap());
+        let (auth, prefix) = auth().await;
+        assert!(auth
+            .enforce("anonymous", &format!("{prefix}/health"), "GET")
+            .await
+            .unwrap());
+        assert!(!auth
+            .enforce("anonymous", &format!("{prefix}/me"), "GET")
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
     async fn user_role_can_me() {
-        let auth = auth().await;
-        assert!(auth.enforce("testuser", "/me", "GET").await.unwrap());
+        let (auth, prefix) = auth().await;
+        assert!(auth
+            .enforce("testuser", &format!("{prefix}/me"), "GET")
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
     async fn add_role_persists() {
-        let auth = auth().await;
+        let (auth, prefix) = auth().await;
         auth.add_role_for_user("alice", "user").await.unwrap();
-        assert!(auth.enforce("alice", "/me", "GET").await.unwrap());
+        assert!(auth
+            .enforce("alice", &format!("{prefix}/me"), "GET")
+            .await
+            .unwrap());
     }
 }

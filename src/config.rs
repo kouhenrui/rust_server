@@ -12,6 +12,9 @@ use std::time::Duration;
 
 use crate::util::parse_or_warn;
 
+/// Default HTTP API prefix when `THUMBOR_API_PREFIX` is unset.
+pub const DEFAULT_API_PREFIX: &str = "/api/v1";
+
 /// Runtime configuration. Construct via [`Config::from_env`] or [`Config::default`].
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -51,6 +54,9 @@ pub struct Config {
 
     /// Casbin model file (`THUMBOR_CASBIN_MODEL`, default `config/casbin_model.conf`).
     pub casbin_model: PathBuf,
+
+    /// HTTP API route prefix (`THUMBOR_API_PREFIX`, default `/api/v1`).
+    pub api_prefix: String,
 }
 
 /// 构造一组**可直接部署**的默认值。
@@ -73,6 +79,7 @@ impl Default for Config {
             cors_origins: Vec::new(),
             img_cache_ttl_secs: Some(3600),
             casbin_model: PathBuf::from("config/casbin_model.conf"),
+            api_prefix: DEFAULT_API_PREFIX.to_string(),
         }
     }
 }
@@ -167,6 +174,26 @@ impl Config {
                 cfg.casbin_model = PathBuf::from(v);
             }
         }
+        if let Ok(v) = std::env::var("THUMBOR_API_PREFIX") {
+            if !v.is_empty() {
+                cfg.api_prefix = normalize_api_prefix(&v);
+            }
+        }
         cfg
     }
+}
+
+/// Normalize API prefix: leading `/`, no trailing `/`, empty → default.
+pub fn normalize_api_prefix(raw: &str) -> String {
+    let mut prefix = raw.trim().to_string();
+    if prefix.is_empty() {
+        return DEFAULT_API_PREFIX.to_string();
+    }
+    if !prefix.starts_with('/') {
+        prefix.insert(0, '/');
+    }
+    while prefix.len() > 1 && prefix.ends_with('/') {
+        prefix.pop();
+    }
+    prefix
 }

@@ -14,14 +14,33 @@ pub fn router(state: AppState) -> Router {
     let state = Arc::new(state);
 
     Router::new()
-        .route("/health", get(controller::health::health))
-        .route("/login", post(controller::auth::login))
-        .route(
-            "/img",
-            get(controller::img::img_get).post(controller::img::img_post),
-        )
-        .route("/me", get(controller::auth::me))
+        .nest(state.config.api_prefix.as_str(), api_v1_routes())
         .layer(from_fn_with_state(state.clone(), authorize_middleware))
         .layer(from_fn(logging_middleware))
         .with_state(state)
+}
+
+/// API 路由组：按业务模块 merge，共享同一 state。
+fn api_v1_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .merge(health_routes())
+        .merge(auth_routes())
+        .merge(img_routes())
+}
+
+fn health_routes() -> Router<Arc<AppState>> {
+    Router::new().route("/health", get(controller::health::health))
+}
+
+fn auth_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/login", post(controller::auth::login))
+        .route("/me", get(controller::auth::me))
+}
+
+fn img_routes() -> Router<Arc<AppState>> {
+    Router::new().route(
+        "/img",
+        get(controller::img::img_get).post(controller::img::img_post),
+    )
 }

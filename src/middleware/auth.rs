@@ -57,7 +57,10 @@ pub async fn authorize_middleware(
         request.extensions_mut().insert(claims.clone());
         claims.sub
     } else {
-        if JWT_REQUIRED.iter().any(|p| *p == path) {
+        let api_path = path
+            .strip_prefix(state.config.api_prefix.as_str())
+            .unwrap_or(&path);
+        if JWT_REQUIRED.iter().any(|p| *p == api_path) {
             return Err(AppError::Unauthorized(
                 "missing authorization header".into(),
             ));
