@@ -59,11 +59,7 @@ impl DbAuth {
         auth
     }
 
-    pub fn url_or_build(
-        &self,
-        scheme: &str,
-        default_port: u16,
-    ) -> Result<String, AppError> {
+    pub fn url_or_build(&self, scheme: &str, default_port: u16) -> Result<String, AppError> {
         if let Some(url) = &self.url {
             if !url.is_empty() {
                 return Ok(url.clone());
@@ -78,7 +74,11 @@ impl DbAuth {
         Ok(format!(
             "{scheme}://{userinfo}{}:{}/{}",
             self.host,
-            if self.port == 0 { default_port } else { self.port },
+            if self.port == 0 {
+                default_port
+            } else {
+                self.port
+            },
             self.database
         ))
     }

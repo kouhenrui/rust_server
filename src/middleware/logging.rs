@@ -147,8 +147,7 @@ fn resolve_trace_id(incoming: Option<&str>) -> String {
 fn set_trace_response_header(headers: &mut axum::http::HeaderMap, trace_id: &str) {
     headers.insert(
         axum::http::HeaderName::from_static(TRACE_ID_HEADER),
-        axum::http::HeaderValue::from_str(trace_id)
-            .expect("trace_id must be a valid header value"),
+        axum::http::HeaderValue::from_str(trace_id).expect("trace_id must be a valid header value"),
     );
 }
 

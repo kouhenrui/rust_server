@@ -1,12 +1,11 @@
-//! Casbin [`Adapter`] backed by sqlx [`AnyPool`]（PostgreSQL / MySQL / SQLite）。
+//! Casbin [`Adapter`] backed by [`CasbinRuleRepository`].
 
 use async_trait::async_trait;
 use casbin::{Adapter, Filter, Model, Result as CasbinResult};
-use sqlx::AnyPool;
 
-use super::casbin_db::{pad_rule_vec, trim_rule};
-use crate::entity::{CasbinRulePolicy, SqlBackend};
-use crate::error::{AppError, AppResult};
+use crate::entity::trim_rule;
+use crate::entity::{CasbinRuleRepository, SqlBackend};
+use sqlx::AnyPool;
 
 #[derive(Clone)]
 pub struct SqlxAnyAdapter {
@@ -24,13 +23,9 @@ impl SqlxAnyAdapter {
         }
     }
 
-    fn map_err(e: sqlx::Error) -> casbin::Error {
-        casbin::Error::AdapterError(casbin::error::AdapterError(Box::new(e)))
-    }
-
-    fn map_app_err(e: AppError) -> casbin::Error {
+    fn map_err(e: crate::error::AppError) -> casbin::Error {
         casbin::Error::AdapterError(casbin::error::AdapterError(Box::new(
-            std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+            std::io::Error::other(e.to_string()),
         )))
     }
 }
@@ -38,8 +33,7 @@ impl SqlxAnyAdapter {
 #[async_trait]
 impl Adapter for SqlxAnyAdapter {
     async fn load_policy(&mut self, m: &mut dyn Model) -> CasbinResult<()> {
-        let rows = sqlx::query_as::<_, CasbinRulePolicy>(CasbinRulePolicy::select_all_ordered())
-            .fetch_all(&self.pool)
+        let rows = CasbinRuleRepository::list_all_ordered(&self.pool)
             .await
             .map_err(Self::map_err)?;
 
@@ -56,8 +50,7 @@ impl Adapter for SqlxAnyAdapter {
         m: &mut dyn Model,
         f: Filter<'a>,
     ) -> CasbinResult<()> {
-        let rows = sqlx::query_as::<_, CasbinRulePolicy>(CasbinRulePolicy::select_all_ordered())
-            .fetch_all(&self.pool)
+        let rows = CasbinRuleRepository::list_all_ordered(&self.pool)
             .await
             .map_err(Self::map_err)?;
 
@@ -92,26 +85,25 @@ impl Adapter for SqlxAnyAdapter {
     }
 
     async fn save_policy(&mut self, m: &mut dyn Model) -> CasbinResult<()> {
-        sqlx::query("DELETE FROM casbin_rule")
-            .execute(&self.pool)
+        CasbinRuleRepository::delete_all(&self.pool)
             .await
             .map_err(Self::map_err)?;
 
         if let Some(ast_map) = m.get_model().get("p") {
             for (ptype, ast) in ast_map {
                 for rule in ast.get_policy() {
-                    insert_rule_db(&self.pool, self.backend, ptype, rule)
+                    CasbinRuleRepository::insert(&self.pool, self.backend, ptype, rule)
                         .await
-                        .map_err(Self::map_app_err)?;
+                        .map_err(Self::map_err)?;
                 }
             }
         }
         if let Some(ast_map) = m.get_model().get("g") {
             for (ptype, ast) in ast_map {
                 for rule in ast.get_policy() {
-                    insert_rule_db(&self.pool, self.backend, ptype, rule)
+                    CasbinRuleRepository::insert(&self.pool, self.backend, ptype, rule)
                         .await
-                        .map_err(Self::map_app_err)?;
+                        .map_err(Self::map_err)?;
                 }
             }
         }
@@ -119,8 +111,7 @@ impl Adapter for SqlxAnyAdapter {
     }
 
     async fn clear_policy(&mut self) -> CasbinResult<()> {
-        sqlx::query("DELETE FROM casbin_rule")
-            .execute(&self.pool)
+        CasbinRuleRepository::delete_all(&self.pool)
             .await
             .map_err(Self::map_err)?;
         self.is_filtered = false;
@@ -133,10 +124,9 @@ impl Adapter for SqlxAnyAdapter {
         ptype: &str,
         rule: Vec<String>,
     ) -> CasbinResult<bool> {
-        let inserted = insert_rule_db(&self.pool, self.backend, ptype, &rule)
+        CasbinRuleRepository::insert(&self.pool, self.backend, ptype, &rule)
             .await
-            .map_err(Self::map_app_err)?;
-        Ok(inserted)
+            .map_err(Self::map_err)
     }
 
     async fn add_policies(
@@ -160,24 +150,9 @@ impl Adapter for SqlxAnyAdapter {
         ptype: &str,
         rule: Vec<String>,
     ) -> CasbinResult<bool> {
-        let cols = pad_rule_vec(&rule);
-        let result = sqlx::query(
-            r#"
-            DELETE FROM casbin_rule
-            WHERE ptype = ? AND v0 = ? AND v1 = ? AND v2 = ? AND v3 = ? AND v4 = ? AND v5 = ?
-            "#,
-        )
-        .bind(ptype)
-        .bind(&cols[0])
-        .bind(&cols[1])
-        .bind(&cols[2])
-        .bind(&cols[3])
-        .bind(&cols[4])
-        .bind(&cols[5])
-        .execute(&self.pool)
-        .await
-        .map_err(Self::map_err)?;
-        Ok(result.rows_affected() > 0)
+        CasbinRuleRepository::delete_by_rule(&self.pool, ptype, &rule)
+            .await
+            .map_err(Self::map_err)
     }
 
     async fn remove_policies(
@@ -202,27 +177,9 @@ impl Adapter for SqlxAnyAdapter {
         field_index: usize,
         field_values: Vec<String>,
     ) -> CasbinResult<bool> {
-        let mut sql = String::from("DELETE FROM casbin_rule WHERE ptype = ?");
-        let mut binds: Vec<String> = vec![ptype.to_string()];
-
-        let columns = ["v0", "v1", "v2", "v3", "v4", "v5"];
-        if field_index <= columns.len() {
-            for (offset, value) in field_values.iter().enumerate() {
-                if value.is_empty() {
-                    continue;
-                }
-                let col = columns[field_index + offset];
-                sql.push_str(&format!(" AND {col} = ?"));
-                binds.push(value.clone());
-            }
-        }
-
-        let mut query = sqlx::query(&sql);
-        for value in &binds {
-            query = query.bind(value);
-        }
-        let result = query.execute(&self.pool).await.map_err(Self::map_err)?;
-        Ok(result.rows_affected() > 0)
+        CasbinRuleRepository::delete_filtered(&self.pool, ptype, field_index, &field_values)
+            .await
+            .map_err(Self::map_err)
     }
 
     fn is_filtered(&self) -> bool {
@@ -246,25 +203,4 @@ fn insert_model_rule(m: &mut dyn Model, ptype: &str, rule: Vec<String>) -> Casbi
         }
     }
     Ok(())
-}
-
-async fn insert_rule_db(
-    pool: &AnyPool,
-    backend: SqlBackend,
-    ptype: &str,
-    rule: &[String],
-) -> AppResult<bool> {
-    let cols = pad_rule_vec(rule);
-    let result = sqlx::query(backend.casbin_insert_sql())
-        .bind(ptype)
-        .bind(&cols[0])
-        .bind(&cols[1])
-        .bind(&cols[2])
-        .bind(&cols[3])
-        .bind(&cols[4])
-        .bind(&cols[5])
-        .execute(pool)
-        .await
-        .map_err(|e| AppError::Internal(format!("casbin insert: {e}")))?;
-    Ok(result.rows_affected() > 0)
 }

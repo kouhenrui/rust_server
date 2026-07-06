@@ -2,6 +2,6 @@
 //! pipeline is shared via [`img::process_image`], responses via
 //! [`crate::response::ImageOutcome`].
 
+pub mod auth;
 pub mod health;
 pub mod img;
-pub mod auth;

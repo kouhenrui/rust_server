@@ -1,5 +1,7 @@
 //! Integration tests for the unified `ApiResponse` envelope.
 
+mod common;
+
 use std::path::PathBuf;
 
 use axum::body::{to_bytes, Body};
@@ -10,11 +12,10 @@ use prost::Message;
 use serde_json::Value;
 use tower::ServiceExt;
 
-use thumbor::auth::{upsert_account_for_backend, SqlBackend};
+use common::{app_with_root, connect_state};
 use thumbor::config::Config;
 use thumbor::proto::api::{ApiResponse, ImageRequest};
 use thumbor::response::{SUCCESS_CODE, SUCCESS_MESSAGE};
-use thumbor::state::AppState;
 
 fn make_test_root() -> PathBuf {
     let root = std::env::temp_dir().join(format!(
@@ -31,25 +32,6 @@ fn make_test_root() -> PathBuf {
     });
     img.save(root.join("tiny.png")).unwrap();
     root
-}
-
-async fn app_with_root(root: PathBuf) -> axum::Router {
-    std::env::set_var("THUMBOR_DB_BACKEND", "sqlite");
-    std::env::set_var("THUMBOR_DB_URL", "sqlite:file:memdb1?mode=memory&cache=shared");
-    let cfg = Config {
-        local_source_root: Some(root),
-        ..Config::default()
-    };
-    let state = AppState::connect(cfg).await.unwrap();
-    upsert_account_for_backend(
-        state.db.sql_pool().unwrap(),
-        SqlBackend::Sqlite,
-        "testuser",
-        "testpass",
-    )
-    .await
-    .unwrap();
-    thumbor::router::router(state)
 }
 
 #[tokio::test]
@@ -296,7 +278,9 @@ async fn login_returns_token() {
     let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
     let json: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(json["code"], SUCCESS_CODE);
-    assert!(json["data"]["token"].as_str().is_some_and(|s| !s.is_empty()));
+    assert!(json["data"]["token"]
+        .as_str()
+        .is_some_and(|s| !s.is_empty()));
     assert!(json["data"]["expires_at"].as_u64().is_some());
 
     let _ = std::fs::remove_dir_all(&root);
@@ -395,14 +379,12 @@ async fn me_returns_profile_with_valid_token() {
 async fn img_result_is_cached_with_memory_backend() {
     let root = make_test_root();
     std::env::set_var("THUMBOR_CACHE_BACKEND", "memory");
-    std::env::set_var("THUMBOR_DB_BACKEND", "sqlite");
-    std::env::set_var("THUMBOR_DB_URL", "sqlite:file:memdb1?mode=memory&cache=shared");
 
     let cfg = Config {
         local_source_root: Some(root.clone()),
         ..Config::default()
     };
-    let state = AppState::connect(cfg).await.unwrap();
+    let state = connect_state(cfg).await;
     let app = thumbor::router::router(state);
 
     let qs = "src=tiny.png&w=4&h=4";
@@ -435,9 +417,7 @@ async fn img_result_is_cached_with_memory_backend() {
         .unwrap();
     assert_eq!(second.status(), StatusCode::OK);
 
-    let bytes = to_bytes(second.into_body(), 8 * 1024 * 1024)
-        .await
-        .unwrap();
+    let bytes = to_bytes(second.into_body(), 8 * 1024 * 1024).await.unwrap();
     let json: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(json["code"], SUCCESS_CODE);
 

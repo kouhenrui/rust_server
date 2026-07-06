@@ -18,12 +18,7 @@ pub trait Cache: Send + Sync {
 
     async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, AppError>;
 
-    async fn set(
-        &self,
-        key: &str,
-        value: &[u8],
-        ttl: Option<u64>,
-    ) -> Result<(), AppError>;
+    async fn set(&self, key: &str, value: &[u8], ttl: Option<u64>) -> Result<(), AppError>;
 
     async fn delete(&self, keys: &[&str]) -> Result<usize, AppError>;
 }
@@ -46,12 +41,7 @@ impl Cache for NoopCache {
         Ok(None)
     }
 
-    async fn set(
-        &self,
-        _key: &str,
-        _value: &[u8],
-        _ttl: Option<u64>,
-    ) -> Result<(), AppError> {
+    async fn set(&self, _key: &str, _value: &[u8], _ttl: Option<u64>) -> Result<(), AppError> {
         Ok(())
     }
 
@@ -98,9 +88,7 @@ impl CacheClient {
     pub async fn connect(config: &CacheBackendConfig) -> Result<Self, AppError> {
         match config {
             CacheBackendConfig::Disabled => Ok(Self::disabled()),
-            CacheBackendConfig::Redis(cfg) => {
-                Ok(Self::Redis(RedisCache::connect(cfg).await?))
-            }
+            CacheBackendConfig::Redis(cfg) => Ok(Self::Redis(RedisCache::connect(cfg).await?)),
             CacheBackendConfig::Memory(cfg) => Ok(Self::Memory(MemoryCache::new(cfg))),
         }
     }
@@ -121,12 +109,7 @@ impl CacheClient {
         delegate_async!(self, get(key))
     }
 
-    pub async fn set(
-        &self,
-        key: &str,
-        value: &[u8],
-        ttl: Option<u64>,
-    ) -> Result<(), AppError> {
+    pub async fn set(&self, key: &str, value: &[u8], ttl: Option<u64>) -> Result<(), AppError> {
         delegate_async!(self, set(key, value, ttl))
     }
 

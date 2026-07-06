@@ -1,6 +1,6 @@
 //! Redis 缓存后端。
 
-use super::cache::Cache;
+use super::client::Cache;
 use super::config::RedisConfig;
 use crate::error::AppError;
 use redis::aio::MultiplexedConnection;
@@ -49,12 +49,7 @@ impl Cache for RedisCache {
             .map_err(|e| Self::map_err("redis get", e))
     }
 
-    async fn set(
-        &self,
-        key: &str,
-        value: &[u8],
-        ttl: Option<u64>,
-    ) -> Result<(), AppError> {
+    async fn set(&self, key: &str, value: &[u8], ttl: Option<u64>) -> Result<(), AppError> {
         let mut conn = self.conn.clone();
         if let Some(secs) = ttl {
             conn.set_ex::<_, _, ()>(key, value, secs)

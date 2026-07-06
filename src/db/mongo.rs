@@ -1,6 +1,6 @@
 //! MongoDB 客户端连接。
 
-use super::db::DbProvider;
+use super::client::DbProvider;
 use crate::error::AppError;
 use crate::util::redact_url;
 use mongodb::{bson::doc, Client};

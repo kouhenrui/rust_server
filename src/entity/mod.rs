@@ -1,10 +1,16 @@
-//! 实体表：struct 定义、DDL 与迁移入口。
+//! 实体表：struct 定义、DDL、迁移与仓储。
 
-mod models;
+pub(crate) mod models;
+pub(crate) mod repositories;
 mod schema;
 mod sql_backend;
 
-pub use models::{Account, AccountAuth, CasbinRule, CasbinRulePolicy};
+#[cfg(test)]
+pub(crate) mod test_util;
+
+pub use models::{Account, AccountAuth, CasbinRulePolicy};
+pub(crate) use repositories::casbin_rule::trim_rule;
+pub use repositories::{AccountRepository, CasbinRuleRepository};
 pub use schema::tables;
 pub use sql_backend::SqlBackend;
 
@@ -26,17 +32,9 @@ pub async fn migrate(pool: &AnyPool, backend: SqlBackend) -> AppResult<()> {
 mod tests {
     use super::*;
 
-    async fn pool() -> AnyPool {
-        sqlx::any::install_default_drivers();
-        AnyPool::connect("sqlite:file:memdb_entity?mode=memory&cache=shared")
-            .await
-            .expect("sqlite")
-    }
-
     #[tokio::test]
     async fn migrate_creates_all_tables() {
-        let pool = pool().await;
-        migrate(&pool, SqlBackend::Sqlite).await.unwrap();
+        let pool = test_util::migrated_pool("memdb_entity").await;
 
         let (accounts,): (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='accounts'",

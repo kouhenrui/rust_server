@@ -47,18 +47,13 @@ impl CacheAuth {
 }
 
 /// 热插拔后端选择，由 `THUMBOR_CACHE_BACKEND` 驱动。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum CacheBackendConfig {
     /// 不启用缓存（读写均为 no-op）。
+    #[default]
     Disabled,
     Redis(RedisConfig),
     Memory(MemoryConfig),
-}
-
-impl Default for CacheBackendConfig {
-    fn default() -> Self {
-        Self::Disabled
-    }
 }
 
 impl CacheBackendConfig {

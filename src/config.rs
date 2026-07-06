@@ -126,7 +126,8 @@ impl Config {
         if let Ok(v) = std::env::var("THUMBOR_ALLOW_REMOTE") {
             // 接受 1/true/yes 任意大小写 —— kubectl/Helm 的 value 文件
             // 有时给的是 "True" / "YES"，苛求 "true" 反而失之过严。
-            cfg.allow_remote_sources = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes");
+            cfg.allow_remote_sources =
+                matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes");
         }
         if let Ok(v) = std::env::var("THUMBOR_LOCAL_SOURCE_ROOT") {
             cfg.local_source_root = Some(PathBuf::from(v));

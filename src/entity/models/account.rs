@@ -37,12 +37,6 @@ pub struct AccountAuth {
 }
 
 impl Account {
-    pub fn select_by_username() -> &'static str {
-        "SELECT id, username, password_hash, email, phone, nickname, status, \
-         last_login_at, created_at, updated_at, deleted_at FROM accounts \
-         WHERE username = ? AND deleted_at IS NULL"
-    }
-
     pub fn is_deleted(&self) -> bool {
         self.deleted_at.is_some()
     }
@@ -53,11 +47,6 @@ impl Account {
 }
 
 impl AccountAuth {
-    pub fn select_by_username() -> &'static str {
-        "SELECT id, password_hash, status FROM accounts \
-         WHERE username = ? AND deleted_at IS NULL"
-    }
-
     pub fn is_active(&self) -> bool {
         self.status == status::ACTIVE
     }

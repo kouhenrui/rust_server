@@ -18,7 +18,10 @@ use std::io::Cursor;
 /// 还得手动把 scheme 拼回去（`reqwest` 不接受裸主机名），
 /// 这是 `url` crate 没引进来换来的依赖体积。
 pub async fn load_source(state: &AppState, src: &str) -> AppResult<Vec<u8>> {
-    if let Some(rest) = src.strip_prefix("http://").or_else(|| src.strip_prefix("https://")) {
+    if let Some(rest) = src
+        .strip_prefix("http://")
+        .or_else(|| src.strip_prefix("https://"))
+    {
         if !state.config.allow_remote_sources {
             return Err(AppError::RemoteDisabled);
         }
@@ -39,7 +42,10 @@ pub async fn load_source(state: &AppState, src: &str) -> AppResult<Vec<u8>> {
         Some(root) => root.join(src),
         None => std::path::PathBuf::from(src),
     };
-    read_local(resolved.to_str().unwrap_or(src), state.config.max_source_bytes)
+    read_local(
+        resolved.to_str().unwrap_or(src),
+        state.config.max_source_bytes,
+    )
 }
 
 /// 读本地文件，同样做大小检查。
@@ -81,13 +87,18 @@ mod tests {
     use crate::config::Config;
 
     fn cfg() -> Config {
-        Config { allow_remote_sources: false, ..Config::default() }
+        Config {
+            allow_remote_sources: false,
+            ..Config::default()
+        }
     }
 
     #[tokio::test]
     async fn rejects_remote_when_disabled() {
         let st = AppState::test(cfg()).await.unwrap();
-        let err = load_source(&st, "https://example.com/cat.png").await.unwrap_err();
+        let err = load_source(&st, "https://example.com/cat.png")
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppError::RemoteDisabled));
     }
 

@@ -2,8 +2,8 @@
 
 use time::macros::format_description;
 use tracing::Subscriber;
-use tracing_subscriber::fmt::{self, format::FmtSpan};
 use tracing_subscriber::fmt::time::LocalTime;
+use tracing_subscriber::fmt::{self, format::FmtSpan};
 use tracing_subscriber::layer::Layer;
 use tracing_subscriber::registry::LookupSpan;
 

@@ -1,6 +1,6 @@
 //! 进程内 LRU 内存缓存。
 
-use super::cache::Cache;
+use super::client::Cache;
 use super::config::MemoryConfig;
 use crate::error::AppError;
 use std::collections::{HashMap, VecDeque};
@@ -90,12 +90,7 @@ impl Cache for MemoryCache {
         Ok(Some(value))
     }
 
-    async fn set(
-        &self,
-        key: &str,
-        value: &[u8],
-        ttl: Option<u64>,
-    ) -> Result<(), AppError> {
+    async fn set(&self, key: &str, value: &[u8], ttl: Option<u64>) -> Result<(), AppError> {
         let mut inner = self.inner.write().await;
         let ttl = ttl.map(Duration::from_secs).or(inner.default_ttl);
         inner.map.insert(
@@ -113,9 +108,9 @@ impl Cache for MemoryCache {
     async fn delete(&self, keys: &[&str]) -> Result<usize, AppError> {
         let mut inner = self.inner.write().await;
         let mut removed = 0usize;
-        for key in keys {
-            if inner.map.contains_key(*key) {
-                Self::remove_key(&mut inner, *key);
+        for &key in keys {
+            if inner.map.contains_key(key) {
+                Self::remove_key(&mut inner, key);
                 removed += 1;
             }
         }

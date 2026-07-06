@@ -13,15 +13,15 @@ pub mod http_client;
 pub mod logger;
 pub mod middleware;
 pub mod params;
-pub mod response;
-pub mod router;
 pub mod proc;
 pub mod proto;
+pub mod response;
+pub mod router;
 pub mod source;
 pub mod state;
 pub mod util;
 
-pub use auth::{hash_password, verify_password, bearer_token, Claims, JwtAuth, CasbinAuth};
+pub use auth::{bearer_token, hash_password, verify_password, CasbinAuth, Claims, JwtAuth};
 pub use config::Config;
 pub use error::{AppError, AppResult, AppResultExt, AppResultMapExt};
 pub use state::AppState;

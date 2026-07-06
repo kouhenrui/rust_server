@@ -7,8 +7,9 @@
 //! - `POST /img` + `Content-Type: application/x-protobuf` → protobuf
 
 use crate::error::{AppError, AppResult};
-use crate::params::{CropRect, ImgParams, ImgParamsRaw, OutputFormat, WatermarkSpec};
+use crate::params::{ImgParams, ImgParamsRaw, OutputFormat};
 use crate::proc;
+use crate::proc::filter::FilterChain;
 use crate::proc::transform::FitMode;
 use crate::proto::api;
 use crate::response::ImageOutcome;
@@ -34,10 +35,7 @@ pub async fn img_get(
 }
 
 /// `POST /img` handler: protobuf request → [`ImageOutcome`] → response.
-pub async fn img_post(
-    State(state): State<Arc<AppState>>,
-    body: Bytes,
-) -> Response {
+pub async fn img_post(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
     let req = match api::ImageRequest::decode(body.as_ref()) {
         Ok(r) => r,
         Err(e) => {
@@ -63,10 +61,6 @@ pub async fn img_post(
 /// （crop → resize → filter → watermark）就一份代码。转换失败仍
 /// 走 `AppError::BadRequest`，跟 query 路径完全一致。
 fn img_request_to_params(req: api::ImageRequest) -> AppResult<ImgParams> {
-    // 一次性解构 `req` 而不是按字段零散借用：proto 字段里有几个
-    // 拥有所有权的类型（String、Option<CropRect>、Option<Watermark>），
-    // 零散取会让 borrow checker 在 `req.fit()` / `req.format()` 这种
-    // 末尾调用上抱怨「partially moved」。一次解构干净。
     let api::ImageRequest {
         src,
         w,
@@ -78,76 +72,47 @@ fn img_request_to_params(req: api::ImageRequest) -> AppResult<ImgParams> {
         format: format_enum,
     } = req;
 
-    let src = if src.is_empty() {
-        return Err(AppError::BadRequest("missing required 'src'".into()));
-    } else {
-        src
-    };
-
-    // w/h 必须 `> 0` 或者「都不给」(target=None)。proto 的 optional
-    // 与 query 一样可以表达「都不给」。
-    let target = match (w, h) {
-        (Some(0), _) | (_, Some(0)) => {
-            return Err(AppError::BadRequest("w and h must be > 0".into()));
-        }
-        (None, None) => None,
-        (w, h) => Some((w.unwrap_or(0), h.unwrap_or(0))),
-    };
-    if let Some((0, 0)) = target {
-        return Err(AppError::BadRequest("w and h must be > 0".into()));
-    }
-
     let fit = match fit_enum {
-        // `Unspecified` (0) 与未知值都回退到 Cover,跟 query 路径的
-        // `None | Some("cover") | Some("") => FitMode::Cover` 同语义。
         2 => FitMode::Contain,
         3 => FitMode::Stretch,
         _ => FitMode::Cover,
     };
 
-    // proto 路径上没在 query 那种字符串解析层把 `w=0` `h=0` 拦下，
-    // 这里兜底 —— 0 维度的 crop 在后续 `transform::apply` 也会被
-    // 当作「保持原尺寸」处理掉，所以这里直接过滤。
-    let crop = crop
-        .map(|c| CropRect { x: c.x, y: c.y, w: c.w, h: c.h })
-        .filter(|c| c.w > 0 && c.h > 0);
+    let crop = crop.map(|c| crate::params::CropRect {
+        x: c.x,
+        y: c.y,
+        w: c.w,
+        h: c.h,
+    });
 
     let filters = if filters.is_empty() {
-        crate::proc::filter::FilterChain::default()
+        FilterChain::default()
     } else {
-        crate::proc::filter::FilterChain::parse(&filters)?
+        FilterChain::parse(&filters)?
     };
 
     let watermark = watermark.and_then(|w| match w.kind? {
-        api::image_request::watermark::Kind::Text(t) => Some(WatermarkSpec::Text {
+        api::image_request::watermark::Kind::Text(t) => Some(crate::params::WatermarkSpec::Text {
             text: t.text,
             x: t.x,
             y: t.y,
         }),
-        api::image_request::watermark::Kind::Image(i) => Some(WatermarkSpec::Image {
-            path: i.path,
-            x: i.x,
-            y: i.y,
-        }),
+        api::image_request::watermark::Kind::Image(i) => {
+            Some(crate::params::WatermarkSpec::Image {
+                path: i.path,
+                x: i.x,
+                y: i.y,
+            })
+        }
     });
 
     let format = match format_enum {
-        // 与 fit 同样的「UNSPECIFIED / 未知值回退到默认」策略:
-        // 0=Unspecified,1=Png,2=Jpeg,3=Webp。
         2 => OutputFormat::Jpeg,
         3 => OutputFormat::Webp,
         _ => OutputFormat::Png,
     };
 
-    Ok(ImgParams {
-        src,
-        target,
-        fit,
-        crop,
-        filters,
-        watermark,
-        format,
-    })
+    ImgParams::build(src, w, h, fit, crop, filters, watermark, format)
 }
 
 /// 业务核心：拿到校验过的 `ImgParams` 后跑完整流水线，输出
@@ -169,7 +134,6 @@ pub async fn process_image(
     let bytes = source::load_source(state, &params.src).await?;
     let mut img = source::decode(&bytes)?;
 
-    // 顺序与 `transform::apply` 文档保持一致：先裁后缩。
     proc::transform::apply(&mut img, params.crop, params.target, params.fit)?;
     params.filters.clone().apply(&mut img);
     if let Some(wm) = &params.watermark {
@@ -197,7 +161,10 @@ fn pack_cached(body: &[u8], content_type: &str) -> Vec<u8> {
     v
 }
 
-fn unpack_cached(cached: &[u8], format: OutputFormat) -> AppResult<(Bytes, OutputFormat, &'static str)> {
+fn unpack_cached(
+    cached: &[u8],
+    format: OutputFormat,
+) -> AppResult<(Bytes, OutputFormat, &'static str)> {
     let sep = cached
         .iter()
         .position(|&b| b == 0)
@@ -209,10 +176,7 @@ fn unpack_cached(cached: &[u8], format: OutputFormat) -> AppResult<(Bytes, Outpu
 }
 
 /// 把 `DynamicImage` 编码成目标格式的字节。
-fn encode(
-    img: &image::DynamicImage,
-    format: OutputFormat,
-) -> AppResult<(Bytes, &'static str)> {
+fn encode(img: &image::DynamicImage, format: OutputFormat) -> AppResult<(Bytes, &'static str)> {
     let rgba8 = img.to_rgba8();
     let (w, h) = (rgba8.width(), rgba8.height());
     let raw = rgba8.into_raw();

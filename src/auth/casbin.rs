@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::casbin_adapter::SqlxAnyAdapter;
-use super::casbin_db::{seed_if_empty};
+use super::casbin_db::seed_if_empty;
 use crate::entity::SqlBackend;
 
 const DEFAULT_MODEL: &str = include_str!("../../config/casbin_model.conf");
@@ -75,13 +75,7 @@ mod tests {
     use crate::config::Config;
 
     async fn auth() -> CasbinAuth {
-        sqlx::any::install_default_drivers();
-        let pool = AnyPool::connect("sqlite:file:memdb3?mode=memory&cache=shared")
-            .await
-            .unwrap();
-        crate::entity::migrate(&pool, SqlBackend::Sqlite)
-            .await
-            .unwrap();
+        let pool = crate::entity::test_util::migrated_pool("memdb_casbin").await;
         CasbinAuth::new(&Config::default(), &pool, SqlBackend::Sqlite)
             .await
             .unwrap()

@@ -8,6 +8,7 @@
 
 - **图片处理**：裁剪、缩放（cover / contain / stretch）、滤镜链、文字/图片水印
 - **双协议接口**：`GET /img`（Query 参数 + JSON）与 `POST /img`（Protobuf）
+- **认证授权**：JWT 登录 + Casbin RBAC（策略存 SQL 表）
 - **统一响应格式**：成功与失败均返回结构化信封，并附带 `trace_id`
 - **可观测性**：封装 `tracing` 日志宏，HTTP 中间件记录请求参数与耗时
 - **可插拔缓存**：`disabled` / `memory` / `redis`
@@ -43,7 +44,15 @@ curl "http://localhost:8080/img?src=cat.jpg&watermark=image:logo.png@10,10" -o c
 
 ### `GET /health`
 
-返回服务健康状态。
+返回服务健康状态（缓存、数据库 ping）。
+
+### `POST /login`
+
+JSON  body：`{ "username": "...", "password": "..." }`。成功返回 JWT（`data.token`）。
+
+### `GET /me`
+
+需 `Authorization: Bearer <token>`，返回当前用户信息。
 
 ### `GET /img`
 
@@ -106,6 +115,8 @@ curl "http://localhost:8080/img?src=cat.jpg&watermark=image:logo.png@10,10" -o c
 | `THUMBOR_LOCAL_SOURCE_ROOT` | _未设置_ | 相对路径源的前缀目录 |
 | `THUMBOR_CACHE_BACKEND` | `disabled` | 缓存后端：`disabled` / `memory` / `redis` |
 | `THUMBOR_DB_BACKEND` | `sqlite` | 数据库后端 |
+| `THUMBOR_JWT_SECRET` | _启动时随机_ | JWT 签名密钥（生产必设） |
+| `THUMBOR_CORS_ORIGINS` | _未设置_ | CORS 允许来源（逗号分隔） |
 | `RUST_LOG` | `info,thumbor=info,tower_http=info` | 日志过滤级别 |
 
 无效的环境变量值会记录警告日志并回退到默认值。
@@ -113,9 +124,11 @@ curl "http://localhost:8080/img?src=cat.jpg&watermark=image:logo.png@10,10" -o c
 ## 开发
 
 ```bash
+cargo fmt --all -- --check  # 格式检查
+cargo clippy --all-targets -- -D warnings  # lint
 cargo test --lib              # 单元测试
 cargo test                    # 单元测试 + 集成测试
-cargo check --all-targets       # 类型检查
+cargo check --all-targets     # 类型检查
 cargo run                     # 调试模式（编解码较慢）
 ```
 
@@ -131,11 +144,14 @@ src/
 ├── response.rs          # 统一 API 响应信封
 ├── state.rs             # AppState（缓存、数据库、HTTP 客户端）
 ├── source.rs            # 图片源加载
-├── params.rs            # Query 参数解析
+├── params.rs            # Query / proto 共用 ImgParams::build
 ├── controller/          # HTTP 处理器
 │   ├── health.rs
+│   ├── auth.rs          # /login, /me
 │   └── img.rs
-├── middleware/          # 日志中间件（trace_id、请求摘要）
+├── auth/                # JWT、密码、Casbin
+├── entity/              # accounts / casbin_rule 模型与仓储
+├── middleware/          # 日志 + JWT/Casbin 授权
 ├── logger/              # tracing 封装（config / init / macros）
 ├── cache/               # 缓存后端（memory / redis）
 ├── db/                  # 数据库后端（sql / mongo）
@@ -146,7 +162,8 @@ src/
 proto/
 └── api.proto            # Protobuf 定义
 tests/
-└── integration.rs       # 集成测试
+├── common/mod.rs        # 集成测试共享 setup
+└── integration.rs       # 端到端测试
 ```
 
 ## 许可证

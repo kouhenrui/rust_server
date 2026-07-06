@@ -1,6 +1,6 @@
 //! SQL 连接池（PostgreSQL / MySQL / SQLite），基于 sqlx `AnyPool`。
 
-use super::db::DbProvider;
+use super::client::DbProvider;
 use crate::error::AppError;
 use crate::util::redact_url;
 use sqlx::AnyPool;

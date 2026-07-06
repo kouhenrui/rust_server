@@ -2,10 +2,10 @@
 //! internally `Arc`-backed, font is loaded once into a `FontRef`).
 
 use crate::auth::{CasbinAuth, JwtAuth};
-use crate::entity::{self, SqlBackend};
 use crate::cache::{Cache, CacheBackendConfig};
 use crate::config::Config;
 use crate::db::{Db, DbBackendConfig};
+use crate::entity::{self, SqlBackend};
 use crate::error::AppError;
 use crate::http_client::HttpClient;
 use crate::response::{ComponentHealth, HealthData};
@@ -23,7 +23,9 @@ impl FontCache {
     /// 构造一个空缓存。`OnceCell::new` 零成本，第一次 [`FontCache::get`]
     /// 调用时才会去读文件系统 —— 服务启动时不需要字体存在。
     pub fn new() -> Self {
-        Self { inner: OnceCell::new() }
+        Self {
+            inner: OnceCell::new(),
+        }
     }
 
     /// 返回字体的原始字节；只在配置了字体路径且文件能读时才返回 `Some`。
@@ -126,7 +128,10 @@ impl AppState {
     /// 测试用：内存 SQLite + 禁用缓存，避免依赖外部服务。
     pub async fn test(config: Config) -> Result<Self, AppError> {
         std::env::set_var("THUMBOR_DB_BACKEND", "sqlite");
-        std::env::set_var("THUMBOR_DB_URL", "sqlite:file:memdb1?mode=memory&cache=shared");
+        std::env::set_var(
+            "THUMBOR_DB_URL",
+            "sqlite:file:memdb1?mode=memory&cache=shared",
+        );
         Self::connect(config).await
     }
 }

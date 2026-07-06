@@ -40,10 +40,7 @@ fn cors_layer(origins: &[String]) -> CorsLayer {
     if origins.is_empty() {
         return CorsLayer::permissive();
     }
-    let allowed: Vec<HeaderValue> = origins
-        .iter()
-        .filter_map(|o| o.parse().ok())
-        .collect();
+    let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
     CorsLayer::new()
         .allow_origin(allowed)
         .allow_methods(Any)
@@ -62,10 +59,8 @@ async fn shutdown_signal() {
     };
     #[cfg(unix)]
     let terminate = async {
-        let mut term = tokio::signal::unix::signal(
-            tokio::signal::unix::SignalKind::terminate(),
-        )
-        .expect("install SIGTERM handler");
+        let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("install SIGTERM handler");
         term.recv().await;
     };
     #[cfg(not(unix))]

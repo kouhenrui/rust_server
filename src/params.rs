@@ -143,6 +143,44 @@ impl OutputFormat {
 }
 
 impl ImgParams {
+    /// 从已解析的强类型字段组装参数，统一 GET / POST 的校验规则。
+    #[allow(clippy::too_many_arguments)]
+    pub fn build(
+        src: String,
+        w: Option<u32>,
+        h: Option<u32>,
+        fit: FitMode,
+        crop: Option<CropRect>,
+        filters: FilterChain,
+        watermark: Option<WatermarkSpec>,
+        format: OutputFormat,
+    ) -> AppResult<Self> {
+        if src.is_empty() {
+            return Err(AppError::BadRequest("missing required 'src'".into()));
+        }
+
+        let target = match (w, h) {
+            (Some(0), _) | (_, Some(0)) => {
+                return Err(AppError::BadRequest("w and h must be > 0".into()));
+            }
+            (None, None) => None,
+            (w, h) => Some((w.unwrap_or(0), h.unwrap_or(0))),
+        };
+        if let Some((0, 0)) = target {
+            return Err(AppError::BadRequest("w and h must be > 0".into()));
+        }
+
+        Ok(Self {
+            src,
+            target,
+            fit,
+            crop: crop.filter(|c| c.w > 0 && c.h > 0),
+            filters,
+            watermark,
+            format,
+        })
+    }
+
     /// 把「原始」参数 [`ImgParamsRaw`] 解析成校验过的强类型参数。
     ///
     /// **为什么 `parse` 一次吞掉所有错误而不是让 handler 分头校验：**
@@ -179,43 +217,19 @@ impl ImgParams {
     /// assert_eq!(params.fit, FitMode::Cover);
     /// ```
     pub fn parse(raw: ImgParamsRaw) -> AppResult<Self> {
-        // 1. src 必填且非空
         let src = raw
             .src
             .filter(|s| !s.is_empty())
             .ok_or_else(|| AppError::BadRequest("missing required 'src'".into()))?;
 
-        // 2. 解析 w/h：任一为 0 直接拒绝；至少要给一个
-        let target = match (raw.w, raw.h) {
-            (Some(0), _) | (_, Some(0)) => {
-                return Err(AppError::BadRequest("w and h must be > 0".into()));
-            }
-            (w, h) if w.is_some() || h.is_some() => Some((w.unwrap_or(0), h.unwrap_or(0))),
-            _ => None,
-        };
-        // 上面用 (0, 0) 作为「只给一个维度」的占位，这里再拦一次
-        if let Some((0, 0)) = target {
-            return Err(AppError::BadRequest("w and h must be > 0".into()));
-        }
-
-        // 3. fit 字符串 → enum
         let fit = match raw.fit.as_deref() {
             None | Some("cover") | Some("") => FitMode::Cover,
             Some("contain") => FitMode::Contain,
             Some("stretch") => FitMode::Stretch,
-            Some(other) => {
-                return Err(AppError::BadRequest(format!(
-                    "unknown fit mode '{other}'"
-                )))
-            }
+            Some(other) => return Err(AppError::BadRequest(format!("unknown fit mode '{other}'"))),
         };
 
-        // 4-6. crop / filters / watermark 三个可选项
-        let crop = raw
-            .crop
-            .as_deref()
-            .map(parse_crop_rect)
-            .transpose()?;
+        let crop = raw.crop.as_deref().map(parse_crop_rect).transpose()?;
 
         let filters = raw
             .filters
@@ -224,33 +238,16 @@ impl ImgParams {
             .transpose()?
             .unwrap_or_default();
 
-        let watermark = raw
-            .watermark
-            .as_deref()
-            .map(parse_watermark)
-            .transpose()?;
+        let watermark = raw.watermark.as_deref().map(parse_watermark).transpose()?;
 
-        // 7. format 字符串 → enum
         let format = match raw.format.as_deref() {
             None | Some("png") | Some("") => OutputFormat::Png,
             Some("jpeg") | Some("jpg") => OutputFormat::Jpeg,
             Some("webp") => OutputFormat::Webp,
-            Some(other) => {
-                return Err(AppError::BadRequest(format!(
-                    "unknown format '{other}'"
-                )))
-            }
+            Some(other) => return Err(AppError::BadRequest(format!("unknown format '{other}'"))),
         };
 
-        Ok(Self {
-            src,
-            target,
-            fit,
-            crop,
-            filters,
-            watermark,
-            format,
-        })
+        Self::build(src, raw.w, raw.h, fit, crop, filters, watermark, format)
     }
 
     /// Stable cache key from normalized transform parameters.
@@ -339,16 +336,151 @@ fn parse_watermark(s: &str) -> AppResult<WatermarkSpec> {
         .ok_or_else(|| AppError::BadRequest("watermark must end with '@x,y'".into()))?;
     let pos: Vec<&str> = coords.split(',').map(str::trim).collect();
     if pos.len() != 2 {
-        return Err(AppError::BadRequest("watermark coords must be 'x,y'".into()));
+        return Err(AppError::BadRequest(
+            "watermark coords must be 'x,y'".into(),
+        ));
     }
-    let x: i32 = pos[0].parse().map_err(|_| AppError::BadRequest("bad watermark x".into()))?;
-    let y: i32 = pos[1].parse().map_err(|_| AppError::BadRequest("bad watermark y".into()))?;
+    let x: i32 = pos[0]
+        .parse()
+        .map_err(|_| AppError::BadRequest("bad watermark x".into()))?;
+    let y: i32 = pos[1]
+        .parse()
+        .map_err(|_| AppError::BadRequest("bad watermark y".into()))?;
     if head.is_empty() {
         return Err(AppError::BadRequest("watermark text/path is empty".into()));
     }
     Ok(if kind == "image" {
-        WatermarkSpec::Image { path: head.to_string(), x, y }
+        WatermarkSpec::Image {
+            path: head.to_string(),
+            x,
+            y,
+        }
     } else {
-        WatermarkSpec::Text { text: head.to_string(), x, y }
+        WatermarkSpec::Text {
+            text: head.to_string(),
+            x,
+            y,
+        }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::proc::filter::FilterChain;
+    use crate::proc::transform::FitMode;
+
+    #[test]
+    fn build_rejects_empty_src() {
+        let err = ImgParams::build(
+            String::new(),
+            None,
+            None,
+            FitMode::Cover,
+            None,
+            FilterChain::default(),
+            None,
+            OutputFormat::Png,
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn build_rejects_zero_width() {
+        assert!(ImgParams::build(
+            "a.jpg".into(),
+            Some(0),
+            Some(100),
+            FitMode::Cover,
+            None,
+            FilterChain::default(),
+            None,
+            OutputFormat::Png,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn build_allows_single_dimension_target() {
+        let params = ImgParams::build(
+            "x.png".into(),
+            Some(100),
+            None,
+            FitMode::Cover,
+            None,
+            FilterChain::default(),
+            None,
+            OutputFormat::Png,
+        )
+        .unwrap();
+        assert_eq!(params.target, Some((100, 0)));
+    }
+
+    #[test]
+    fn parse_matches_build_for_query_path() {
+        let raw = ImgParamsRaw {
+            src: Some("cat.jpg".into()),
+            w: Some(200),
+            h: None,
+            fit: Some("contain".into()),
+            format: Some("jpeg".into()),
+            ..Default::default()
+        };
+        let parsed = ImgParams::parse(raw).unwrap();
+        let built = ImgParams::build(
+            "cat.jpg".into(),
+            Some(200),
+            None,
+            FitMode::Contain,
+            None,
+            FilterChain::default(),
+            None,
+            OutputFormat::Jpeg,
+        )
+        .unwrap();
+        assert_eq!(parsed.src, built.src);
+        assert_eq!(parsed.target, built.target);
+        assert_eq!(parsed.fit, built.fit);
+        assert_eq!(parsed.format, built.format);
+    }
+
+    #[test]
+    fn build_strips_zero_sized_crop() {
+        let crop = CropRect {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 10,
+        };
+        let params = ImgParams::build(
+            "a.jpg".into(),
+            None,
+            None,
+            FitMode::Cover,
+            Some(crop),
+            FilterChain::default(),
+            None,
+            OutputFormat::Png,
+        )
+        .unwrap();
+        assert!(params.crop.is_none());
+    }
+
+    #[test]
+    fn cache_key_is_stable_for_same_params() {
+        let a = ImgParams::build(
+            "pic.png".into(),
+            Some(10),
+            Some(20),
+            FitMode::Cover,
+            None,
+            FilterChain::default(),
+            None,
+            OutputFormat::Png,
+        )
+        .unwrap();
+        let b = a.clone();
+        assert_eq!(a.cache_key(), b.cache_key());
+    }
 }

@@ -110,7 +110,10 @@ impl ImageOutcome {
 
     pub fn into_json_response(self) -> Response {
         match self {
-            Self::Ok { image, content_type } => api_success(ImageData {
+            Self::Ok {
+                image,
+                content_type,
+            } => api_success(ImageData {
                 image,
                 content_type: content_type.to_string(),
             }),
@@ -120,7 +123,10 @@ impl ImageOutcome {
 
     pub fn into_proto_response(self) -> Response {
         match self {
-            Self::Ok { image, content_type } => proto_success(ImageData {
+            Self::Ok {
+                image,
+                content_type,
+            } => proto_success(ImageData {
                 image,
                 content_type: content_type.to_string(),
             }),

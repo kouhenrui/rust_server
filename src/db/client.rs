@@ -13,7 +13,6 @@ use crate::error::AppError;
 pub trait DbProvider: Send + Sync {
     fn backend_name(&self) -> &'static str;
 
-
     async fn ping(&self) -> Result<(), AppError>;
 }
 
@@ -85,8 +84,8 @@ impl DbClient {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::config::DbAuth;
+    use super::*;
 
     fn sqlite_memory_config() -> DbBackendConfig {
         DbBackendConfig::Sqlite(DbAuth {

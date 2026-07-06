@@ -85,3 +85,56 @@ pub fn resize_with_fit(img: &DynamicImage, tw: u32, th: u32, fit: FitMode) -> Dy
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{ImageBuffer, Rgba};
+
+    fn sample_image(w: u32, h: u32) -> DynamicImage {
+        let buf: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_fn(w, h, |x, y| Rgba([x as u8, y as u8, 128, 255]));
+        DynamicImage::ImageRgba8(buf)
+    }
+
+    #[test]
+    fn stretch_resizes_to_exact_target() {
+        let mut img = sample_image(100, 50);
+        apply(&mut img, None, Some((40, 40)), FitMode::Stretch).unwrap();
+        assert_eq!(img.dimensions(), (40, 40));
+    }
+
+    #[test]
+    fn cover_fills_target_box() {
+        let mut img = sample_image(100, 50);
+        apply(&mut img, None, Some((40, 40)), FitMode::Cover).unwrap();
+        assert_eq!(img.dimensions(), (40, 40));
+    }
+
+    #[test]
+    fn contain_letterboxes_to_target_canvas() {
+        let mut img = sample_image(100, 50);
+        apply(&mut img, None, Some((40, 40)), FitMode::Contain).unwrap();
+        assert_eq!(img.dimensions(), (40, 40));
+    }
+
+    #[test]
+    fn crop_runs_before_resize() {
+        let mut img = sample_image(100, 100);
+        let crop = CropRect {
+            x: 10,
+            y: 10,
+            w: 20,
+            h: 20,
+        };
+        apply(&mut img, Some(crop), Some((10, 10)), FitMode::Stretch).unwrap();
+        assert_eq!(img.dimensions(), (10, 10));
+    }
+
+    #[test]
+    fn apply_rejects_zero_target_dimension() {
+        let mut img = sample_image(10, 10);
+        let err = apply(&mut img, None, Some((0, 10)), FitMode::Cover).unwrap_err();
+        assert!(matches!(err, AppError::BadRequest(_)));
+    }
+}

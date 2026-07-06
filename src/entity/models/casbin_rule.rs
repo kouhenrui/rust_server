@@ -3,7 +3,8 @@
 /// 表名。
 pub const TABLE: &str = "casbin_rule";
 
-/// Casbin 策略完整行（含自增主键）。
+/// Casbin 策略完整行（含自增主键；DDL 对应，当前查询只用 [`CasbinRulePolicy`]）。
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct CasbinRule {
     pub id: i64,
@@ -29,10 +30,6 @@ pub struct CasbinRulePolicy {
 }
 
 impl CasbinRulePolicy {
-    pub fn select_all_ordered() -> &'static str {
-        "SELECT ptype, v0, v1, v2, v3, v4, v5 FROM casbin_rule ORDER BY id"
-    }
-
     pub fn into_rule_values(self) -> [String; 6] {
         [self.v0, self.v1, self.v2, self.v3, self.v4, self.v5]
     }

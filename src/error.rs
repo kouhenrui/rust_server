@@ -82,35 +82,21 @@ impl AppError {
     /// 4xx 表示「调用方的问题」（参数错、源没了、超大），
     /// 502 表示「上游 / 依赖的问题」（远程拒、字体缺、上游 fetch 失败），
     /// 500 是「我自己炸了」（编程错误）。
-    /// 把错误变体映射到稳定的 HTTP 状态码。
-    ///
-    /// 这是 API 契约的一部分：客户端依赖具体状态码做重试 / 缓存决策，
-    /// 所以新增变体时**必须**同时决定它的状态码 —— 不能复用
-    /// `Internal(500)` 来「暂时」兜底。映射理由：
-    /// 4xx 表示「调用方的问题」（参数错、源没了、超大），
-    /// 502 表示「上游 / 依赖的问题」（远程拒、字体缺、上游 fetch 失败），
-    /// 500 是「我自己炸了」（编程错误）。
     pub(crate) fn status(&self) -> StatusCode {
         match self {
             AppError::BadRequest(_) | AppError::Filter(_) => StatusCode::BAD_REQUEST,
             AppError::SourceNotFound(_) => StatusCode::NOT_FOUND,
             AppError::SourceTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
             AppError::UnsupportedFormat | AppError::Decode(_) => StatusCode::UNPROCESSABLE_ENTITY,
-            AppError::RemoteDisabled
-            | AppError::WatermarkFontMissing
-            | AppError::Upstream(_) => StatusCode::BAD_GATEWAY,
+            AppError::RemoteDisabled | AppError::WatermarkFontMissing | AppError::Upstream(_) => {
+                StatusCode::BAD_GATEWAY
+            }
             AppError::Unauthorized(_) | AppError::InvalidToken(_) => StatusCode::UNAUTHORIZED,
             AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
-    /// 把错误变体映射到稳定的**字符串**错误码。
-    ///
-    /// 这些字符串也是公开 API 的一部分（出现在 JSON 响应体里）——
-    /// 客户端写 `switch (err.code)` 的时候要用。**绝对不要**把
-    /// `e.to_string()` 直接当 code；to_string 文本会随 thiserror 模板
-    /// 微调，是「给人看的」而不是「给程序读的」。
     /// 把错误变体映射到稳定的**字符串**错误码。
     ///
     /// 这些字符串也是公开 API 的一部分（出现在 JSON 响应体里）——
@@ -166,5 +152,65 @@ impl From<std::io::Error> for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         crate::response::api_error(&self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use axum::response::IntoResponse;
+    use serde_json::Value;
+
+    fn sample_errors() -> Vec<AppError> {
+        vec![
+            AppError::BadRequest("bad".into()),
+            AppError::SourceNotFound("x".into()),
+            AppError::SourceTooLarge { max: 1 },
+            AppError::UnsupportedFormat,
+            AppError::Decode("bad bytes".into()),
+            AppError::RemoteDisabled,
+            AppError::WatermarkFontMissing,
+            AppError::Filter("oops".into()),
+            AppError::Upstream("timeout".into()),
+            AppError::Unauthorized("nope".into()),
+            AppError::InvalidToken("expired".into()),
+            AppError::Forbidden("denied".into()),
+            AppError::Internal("boom".into()),
+        ]
+    }
+
+    #[test]
+    fn status_and_code_mapping() {
+        let expected = [
+            (400, "bad_request"),
+            (404, "source_not_found"),
+            (413, "source_too_large"),
+            (422, "unsupported_format"),
+            (422, "decode_failed"),
+            (502, "remote_disabled"),
+            (502, "watermark_font_missing"),
+            (400, "invalid_filter"),
+            (502, "upstream_failed"),
+            (401, "unauthorized"),
+            (401, "invalid_token"),
+            (403, "forbidden"),
+            (500, "internal"),
+        ];
+        for (err, (status, code)) in sample_errors().into_iter().zip(expected) {
+            assert_eq!(err.status().as_u16(), status, "{err:?}");
+            assert_eq!(err.code(), code, "{err:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn into_response_uses_matching_status_and_kind() {
+        let err = AppError::Unauthorized("invalid credentials".into());
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+        let json: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["code"], 401);
+        assert_eq!(json["err"]["kind"], "unauthorized");
     }
 }

@@ -1,8 +1,7 @@
 //! Authentication controllers: login and protected profile.
 
-use crate::auth::authenticate;
-use crate::auth::upsert_account_for_backend;
-use crate::auth::SqlBackend;
+use crate::auth::{authenticate, hash_password};
+use crate::entity::{AccountRepository, SqlBackend};
 use crate::error::{AppError, AppResult};
 use crate::middleware::AuthClaims;
 use crate::state::AppState;
@@ -30,14 +29,11 @@ pub struct MeData {
 }
 
 /// `POST /login` — JSON `{ username, password }` → JWT token.
-pub async fn login(
-    State(state): State<Arc<AppState>>,
-    Json(body): Json<LoginRequest>,
-) -> Response {
-    match do_login(&state, &body.username, &body.password).await {
-        Ok(data) => crate::ok!(data).into_response(),
-        Err(err) => err.into_response(),
-    }
+pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<LoginRequest>) -> Response {
+    do_login(&state, &body.username, &body.password)
+        .await
+        .map(|data| crate::ok!(data))
+        .unwrap_or_else(|err| err.into_response())
 }
 
 /// `GET /me` — requires valid Bearer JWT (see `auth_middleware`).
@@ -45,14 +41,9 @@ pub async fn me(AuthClaims(claims): AuthClaims) -> Response {
     crate::ok!(MeData {
         username: claims.sub,
     })
-    .into_response()
 }
 
-async fn do_login(
-    state: &AppState,
-    username: &str,
-    password: &str,
-) -> AppResult<LoginData> {
+async fn do_login(state: &AppState, username: &str, password: &str) -> AppResult<LoginData> {
     if username.trim().is_empty() || password.is_empty() {
         return Err(AppError::BadRequest(
             "username and password are required".into(),
@@ -80,15 +71,17 @@ pub async fn bootstrap_admin(state: &AppState) -> AppResult<()> {
         Ok(v) if !v.is_empty() => v,
         _ => return Ok(()),
     };
-    let password = std::env::var("THUMBOR_BOOTSTRAP_PASSWORD")
-        .map_err(|_| AppError::Internal("THUMBOR_BOOTSTRAP_PASSWORD required with USERNAME".into()))?;
+    let password = std::env::var("THUMBOR_BOOTSTRAP_PASSWORD").map_err(|_| {
+        AppError::Internal("THUMBOR_BOOTSTRAP_PASSWORD required with USERNAME".into())
+    })?;
     if password.is_empty() {
         return Err(AppError::Internal(
             "THUMBOR_BOOTSTRAP_PASSWORD must not be empty".into(),
         ));
     }
     let (backend, pool) = SqlBackend::require_from_db(&state.db)?;
-    upsert_account_for_backend(pool, backend, &username, &password).await?;
+    let password_hash = hash_password(&password)?;
+    AccountRepository::upsert(pool, backend, &username, &password_hash).await?;
     state.casbin.add_role_for_user(&username, "admin").await?;
     crate::info!(username = %username, "bootstrap user ensured");
     Ok(())

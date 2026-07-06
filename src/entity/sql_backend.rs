@@ -46,6 +46,44 @@ impl SqlBackend {
         Ok((backend, pool))
     }
 
+    pub fn accounts_upsert_sql(self) -> &'static str {
+        match self {
+            Self::Mysql => {
+                r#"
+                INSERT INTO accounts (username, password_hash, status)
+                VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    password_hash = VALUES(password_hash),
+                    status = VALUES(status),
+                    deleted_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                "#
+            }
+            Self::Postgres => {
+                r#"
+                INSERT INTO accounts (username, password_hash, status)
+                VALUES (?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET
+                    password_hash = excluded.password_hash,
+                    status = excluded.status,
+                    deleted_at = NULL,
+                    updated_at = NOW()
+                "#
+            }
+            Self::Sqlite => {
+                r#"
+                INSERT INTO accounts (username, password_hash, status)
+                VALUES (?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET
+                    password_hash = excluded.password_hash,
+                    status = excluded.status,
+                    deleted_at = NULL,
+                    updated_at = datetime('now')
+                "#
+            }
+        }
+    }
+
     pub fn casbin_insert_sql(self) -> &'static str {
         match self {
             Self::Sqlite => {

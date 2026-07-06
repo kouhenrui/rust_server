@@ -1,9 +1,9 @@
-//! 缓存模块：抽象见 [`cache::Cache`]，实现见 [`redis`]、[`memory`]。
+//! 缓存模块：抽象见 [`client::Cache`]，实现见 [`redis`]、[`memory`]。
 
-pub mod cache;
+pub mod client;
 pub mod config;
 pub mod memory;
 pub mod redis;
 
-pub use cache::CacheClient as Cache;
+pub use client::CacheClient as Cache;
 pub use config::CacheBackendConfig;

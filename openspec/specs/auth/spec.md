@@ -2,9 +2,20 @@
 
 ## Purpose
 
-Define password hashing and JWT utilities used for user authentication.
-HTTP login and route protection are specified as follow-up work in
-`changes/auth/tasks.md`.
+Define password hashing, JWT, SQL-backed account storage, and Casbin RBAC
+used for login and route protection.
+
+## Architecture
+
+| Layer | Path | Responsibility |
+|-------|------|----------------|
+| Model | `entity/models/account.rs` | `Account`, `AccountAuth`, status constants |
+| Repository | `entity/repositories/account.rs` | SQL CRUD for `accounts` table |
+| Service | `auth/account.rs` | Login business (`authenticate`: bcrypt + `last_login_at`) |
+| Controller | `controller/auth.rs` | `POST /login`, `GET /me`, bootstrap admin |
+
+Casbin policies use `entity/repositories/casbin_rule.rs` (not CSV); model
+file is `config/casbin_model.conf`.
 
 ## Requirements
 
@@ -24,6 +35,30 @@ The service MUST hash passwords with bcrypt (default cost 12) via
 - GIVEN an empty plaintext password
 - WHEN `hash_password` is called
 - THEN the result is `AppError::BadRequest`
+
+### Requirement: Account persistence
+
+Accounts MUST be stored in the SQL `accounts` table (PostgreSQL / MySQL /
+SQLite). MongoDB is not supported for auth tables.
+
+Fields include `username` (unique), `password_hash`, `status`
+(`active` / `disabled` / `locked`), soft-delete via `deleted_at`, and
+`last_login_at` updated on successful login.
+
+#### Scenario: authenticate updates last login
+
+- GIVEN an active account with a valid bcrypt hash
+- WHEN `auth::authenticate` succeeds
+- THEN `last_login_at` is updated in the database
+
+#### Scenario: disabled account rejected
+
+- GIVEN an account with `status != active`
+- WHEN `authenticate` is called with correct password
+- THEN the result is `AppError::Unauthorized`
+
+Repository access MUST go through `entity::AccountRepository`; bootstrap and
+tests may call `AccountRepository::upsert` directly after `hash_password`.
 
 ### Requirement: JWT configuration
 
@@ -65,7 +100,8 @@ HS256 tokens via `jsonwebtoken`.
 
 ### Requirement: AppState integration
 
-`AppState` MUST hold a `jwt: JwtAuth` instance built from runtime config.
+`AppState` MUST hold `jwt: JwtAuth` and `casbin: CasbinAuth` built from
+runtime config and SQL pool.
 
 #### Scenario: state carries jwt helper
 
@@ -110,8 +146,8 @@ otherwise `anonymous` for public routes.
 
 Model file defaults to `config/casbin_model.conf` (override via
 `THUMBOR_CASBIN_MODEL`). Policies are stored in the SQL table `casbin_rule`
-and seeded on first startup when the table is empty. Denied requests MUST
-return HTTP 403 with `err.kind` = `forbidden`.
+via `CasbinRuleRepository` and seeded on first startup when the table is empty.
+Denied requests MUST return HTTP 403 with `err.kind` = `forbidden`.
 
 #### Scenario: anonymous health
 
@@ -124,3 +160,14 @@ return HTTP 403 with `err.kind` = `forbidden`.
 - GIVEN user `testuser` has role `user` in Casbin policy
 - WHEN `GET /me` is called with a valid token for `testuser`
 - THEN Casbin allows the request
+
+### Requirement: Bootstrap admin (optional)
+
+When `THUMBOR_BOOTSTRAP_USERNAME` and `THUMBOR_BOOTSTRAP_PASSWORD` are set,
+startup MUST upsert the account and assign Casbin role `admin` (idempotent).
+
+#### Scenario: bootstrap on startup
+
+- GIVEN both bootstrap env vars are non-empty
+- WHEN the server starts
+- THEN the user exists in `accounts` and has grouping policy `g, <username>, admin`
